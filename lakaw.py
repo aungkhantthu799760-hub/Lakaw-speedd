@@ -1,5 +1,7 @@
 # =====================================================================
-# lakaw.py (KAVIN FAST SPEED - Dual Mode: Auto & Manual)
+# lakaw.py (KAVIN FAST SPEED - License Integrated)
+# အပိုင်း (၁) - Core Engine
+# အပိုင်း (၂) - User Interface (UI) & Main
 # =====================================================================
 
 import os
@@ -19,9 +21,15 @@ from urllib.parse import urlparse, parse_qs, urljoin
 from rich.console import Console
 from rich.text import Text
 from rich.prompt import Prompt
+
+# ★ သင့်ရဲ့ license.py ကို ခေါ်သုံးမည်
 import license as _license
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ═════════════════════════════════════════════════════════════════════
+# အပိုင်း (၁) - CORE ENGINE
+# ═════════════════════════════════════════════════════════════════════
 
 DB_FILE = "lakaw_data.db"
 STATE_FILE = "lakaw_state.json"
@@ -126,7 +134,6 @@ def extract_base_url(url_str):
     except Exception: pass
     return None
 
-# ★ Auto Session ရှာတဲ့စနစ်
 def fetch_session(custom_url=""):
     if custom_url:
         try:
@@ -356,6 +363,10 @@ def scan_loop(mode, length, portal_base=None, session_id=None, is_manual=False, 
                 continue
     except KeyboardInterrupt: pass
 
+# ═════════════════════════════════════════════════════════════════════
+# အပိုင်း (၂) - USER INTERFACE (UI)
+# ═════════════════════════════════════════════════════════════════════
+
 def show_banner():
     clear_screen()
     console.print()
@@ -402,7 +413,6 @@ def ask_scan_method():
             console.print("  [bold red]Invalid![/bold red]"); time.sleep(1); continue
         return {"1": "random", "2": "sequential"}[choice]
 
-# ★ Auto / Manual ရွေးချယ်ခွင့်
 def ask_session_method():
     while True:
         show_banner()
@@ -450,8 +460,4 @@ def run():
             is_manual = state.get("is_manual", False)
 
             show_banner()
-            console.print("  [bold yellow]💾 Previous Session Found[/bold yellow]\n")
-            console.print(f"  Mode   : [bold white]{m.upper()} {l}[/bold white]")
-            console.print(f"  Method : [bold white]{scan_method.upper()}[/bold white]")
-            console.print(f"  Tested : [bold white]{tested:,}[/bold white]")
-            console.print(f"  Hits   : [bold green]{len(hits)}[/bold gree
+       
