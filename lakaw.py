@@ -1,4 +1,4 @@
-# lakaw.py (KAVIN FAST SPEED - Smart URL & Turbo Edition)
+# lakaw.py (KAVIN FAST SPEED - Auto-Heal Turbo Edition)
 import os
 import time
 import json
@@ -95,9 +95,9 @@ def load_state():
         with open(STATE_FILE) as f: return json.load(f)
     except Exception: return None
 
-def save_state(mode, tested, hits, prefix="", custom_url="", scan_method="random"):
+def save_state(mode, tested, hits, custom_url="", scan_method="random"):
     try:
-        with open(STATE_FILE, "w") as f: json.dump({"mode": mode, "tested": tested, "hits": hits, "prefix": prefix, "custom_url": custom_url, "scan_method": scan_method}, f)
+        with open(STATE_FILE, "w") as f: json.dump({"mode": mode, "tested": tested, "hits": hits, "custom_url": custom_url, "scan_method": scan_method}, f)
     except Exception: pass
 
 def clear_state():
@@ -170,30 +170,28 @@ def test_code(portal_base, session_id, code):
         return r.text if r.text else "__NETWORK_ERROR__"
     except Exception: return "__NETWORK_ERROR__"
 
-# ကုဒ်ဖန်တီးမယ့် စနစ်
+# ကုဒ်ဖန်တီးမယ့် စနစ် (Prefix မပါတော့ပါ)
 _seq_counter = 0
-def gen_code(mode, length, prefix="", scan_method="random"):
+def gen_code(mode, length, scan_method="random"):
     global _seq_counter
     try:
-        rem_len = length - len(prefix)
-        if rem_len < 0: rem_len = 0
         if scan_method == "random":
-            if mode == "num": return prefix + str(random.randint(0, 10**rem_len - 1)).zfill(rem_len)
-            elif mode == "eng": return prefix + ''.join(random.choices(string.ascii_lowercase, k=rem_len))
-            elif mode == "mix": return prefix + ''.join(random.choices(string.ascii_lowercase + string.digits, k=rem_len))
+            if mode == "num": return str(random.randint(0, 10**length - 1)).zfill(length)
+            elif mode == "eng": return ''.join(random.choices(string.ascii_lowercase, k=length))
+            elif mode == "mix": return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
         else:
             _seq_counter += 1
-            if mode == "num": return prefix + str(_seq_counter).zfill(rem_len)
+            if mode == "num": return str(_seq_counter).zfill(length)
             elif mode == "eng":
                 n = _seq_counter
                 res = ""
-                for _ in range(rem_len):
+                for _ in range(length):
                     res = chr(97 + (n % 26)) + res
                     n //= 26
-                return prefix + res
-            elif mode == "mix": return prefix + str(_seq_counter).zfill(rem_len)
+                return res
+            elif mode == "mix": return str(_seq_counter).zfill(length)
     except Exception: pass
-    return prefix
+    return ""
 
 def make_layout(mode_name, current_code, tested, elapsed, status, hits, running_logs, speed):
     layout = Layout()
@@ -251,7 +249,7 @@ def make_layout(mode_name, current_code, tested, elapsed, status, hits, running_
     layout["tg_vault"].update(Panel(hits_table, title=f"🎁 Telegram Hits Vault ({len(hits)} / 500 max)", border_style="magenta", box=ROUNDED))
     return layout
 
-def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", start_tested=0, start_hits=None):
+def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0, start_hits=None):
     mode_str = f"{mode}_{length}"
     hits = normalize_hits(start_hits) if start_hits else []
     running_logs, tested = [], start_tested
@@ -275,7 +273,7 @@ def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", star
     last_time, speed_counter, current_speed = time.time(), 0, 0.0
 
     try:
-        push_log(f"[bold bright_cyan]Auto-Heal ON | Method: {scan_method.upper()} | Prefix: '{prefix}'[/bold bright_cyan]")
+        push_log(f"[bold bright_cyan]Auto-Heal ON | Method: {scan_method.upper()}[/bold bright_cyan]")
         while True:
             try:
                 if not session_id or not portal_base:
@@ -287,12 +285,12 @@ def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", star
                         session_id = "auto_session"
                     net_error_streak = 0
 
-                code = gen_code(mode, length, prefix, scan_method)
+                code = gen_code(mode, length, scan_method)
                 if not code or is_tried(conn, code): continue
 
                 mark_tried(conn, code)
                 tested += 1
-                save_state(mode_str, tested, hits, prefix, custom_url, scan_method)
+                save_state(mode_str, tested, hits, custom_url, scan_method)
 
                 speed_counter += 1
                 now = time.time()
@@ -337,7 +335,7 @@ def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", star
                         try:
                             with open(HITS_FILE, "a", encoding="utf-8") as f: f.write(f"[{now_str}] CODE: {code}\n")
                         except Exception: pass
-                        save_state(mode_str, tested, hits, prefix, custom_url, scan_method)
+                        save_state(mode_str, tested, hits, custom_url, scan_method)
                     _update(code, "Active", current_speed)
                     time.sleep(BASE_SLEEP_MIN)
                     continue
@@ -461,10 +459,6 @@ def ask_url_method():
         except Exception: pass
         continue
 
-def ask_extra_configs():
-    prefix = input("➜ Prefix (ဥပမာ - 0, မလိုလျှင် Enter ခေါက်ရန်): ").strip()
-    return prefix
-
 def run():
     state = load_state()
     if state:
@@ -472,7 +466,6 @@ def run():
             m, l = state["mode"].split("_")
             tested = state.get("tested", 0)
             hits = normalize_hits(state.get("hits", []))
-            prefix = state.get("prefix", "")
             custom_url = state.get("custom_url", "")
             scan_method = state.get("scan_method", "random")
 
@@ -485,8 +478,6 @@ def run():
             info.append(f"{m.upper()} {l}\n", style="bold white")
             info.append("  🧭 Method     : ", style="cyan")
             info.append(f"{scan_method.upper()}\n", style="bold white")
-            info.append("  📌 Prefix     : ", style="cyan")
-            info.append(f"{prefix or 'None'}\n", style="bold white")
             info.append("  🌐 URL        : ", style="cyan")
             info.append(f"{custom_url or 'Auto'}\n", style="bold white")
             info.append("  📊 Tested     : ", style="cyan")
@@ -499,7 +490,7 @@ def run():
             ans = input("➜ Resume previous bot session? (y/n): ").strip().lower()
 
             if ans in ("", "y", "yes"):
-                scan_loop(m, int(l), prefix, custom_url, scan_method, start_tested=tested, start_hits=hits)
+                scan_loop(m, int(l), custom_url, scan_method, start_tested=tested, start_hits=hits)
                 return
             else: clear_state()
         except KeyboardInterrupt: raise
@@ -519,9 +510,7 @@ def run():
         if url_choice is None: continue
         custom_url, url_mode = url_choice
 
-        prefix = ask_extra_configs()
-        
-        scan_loop(mode, length, prefix, custom_url, method)
+        scan_loop(mode, length, custom_url, method)
         return
 
 def main():
