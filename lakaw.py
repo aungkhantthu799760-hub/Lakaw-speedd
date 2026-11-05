@@ -1,4 +1,4 @@
-# lakaw.py (KAVIN FAST SPEED - Auto-Heal & Turbo Edition)
+# lakaw.py (KAVIN FAST SPEED - Smart URL & Turbo Edition)
 import os
 import time
 import json
@@ -28,10 +28,10 @@ STATE_FILE = "lakaw_state.json"
 HITS_FILE = "hits.txt"
 
 # ⚡ Turbo Speed & Anti-Ban Optimization
-BASE_SLEEP_MIN = 0.0005
-BASE_SLEEP_MAX = 0.001
+BASE_SLEEP_MIN = 0.001
+BASE_SLEEP_MAX = 0.005
 RATE_LIMIT_SLEEP = 30
-NETWORK_RETRY_SLEEP = 0.2
+NETWORK_RETRY_SLEEP = 0.5
 SESSION_REFRESH_SLEEP = 1.0
 
 console = Console()
@@ -433,10 +433,37 @@ def ask_scan_method():
             continue
         return {"1": "random", "2": "sequential"}[choice]
 
+def ask_url_method():
+    while True:
+        clear_screen()
+        try:
+            console.print(Panel(Align.center(Text("🌐 URL METHOD", style="bold bright_white on dark_blue")), border_style="blue", box=HEAVY))
+            console.print()
+            menu = Text()
+            menu.append("  [1] 📝  MANUAL URL (IP ကို ကိုယ်တိုင်ထည့်မယ်)\n", style="bold bright_white")
+            menu.append("  [2] 🔄  AUTO CONNECT (အလိုအလျောက် ရှာမယ်)\n", style="bold bright_white")
+            menu.append("  [0] ⬅  BACK TO MENU\n", style="bold bright_red")
+            console.print(Panel(menu, title="[bold bright_yellow] SELECT URL METHOD [/bold bright_yellow]", border_style="bright_yellow", box=DOUBLE))
+            choice = input("➜ Select Method: ").strip()
+        except KeyboardInterrupt: raise
+        except Exception: return ("", "")
+
+        if choice == "0": return None
+        if choice == "1":
+            custom_url = input("➜ IP / URL (ဥပမာ - http://192.168.1.1): ").strip()
+            return (custom_url, "manual")
+        if choice == "2":
+            return ("", "auto")
+        
+        try:
+            console.print("[bold bright_red]❌ Invalid! Choose 1 or 2.[/bold bright_red]")
+            time.sleep(1)
+        except Exception: pass
+        continue
+
 def ask_extra_configs():
     prefix = input("➜ Prefix (ဥပမာ - 0, မလိုလျှင် Enter ခေါက်ရန်): ").strip()
-    custom_url = input("➜ Custom URL (ဥပမာ - http://192.168.1.1, အလိုအလျောက်ဆိုလျှင် Enter ခေါက်ရန်): ").strip()
-    return prefix, custom_url
+    return prefix
 
 def run():
     state = load_state()
@@ -460,7 +487,7 @@ def run():
             info.append(f"{scan_method.upper()}\n", style="bold white")
             info.append("  📌 Prefix     : ", style="cyan")
             info.append(f"{prefix or 'None'}\n", style="bold white")
-            info.append("  🌐 Custom URL : ", style="cyan")
+            info.append("  🌐 URL        : ", style="cyan")
             info.append(f"{custom_url or 'Auto'}\n", style="bold white")
             info.append("  📊 Tested     : ", style="cyan")
             info.append(f"{tested:,}\n", style="bold white")
@@ -488,7 +515,12 @@ def run():
         method = ask_scan_method()
         if method is None: continue
 
-        prefix, custom_url = ask_extra_configs()
+        url_choice = ask_url_method()
+        if url_choice is None: continue
+        custom_url, url_mode = url_choice
+
+        prefix = ask_extra_configs()
+        
         scan_loop(mode, length, prefix, custom_url, method)
         return
 
