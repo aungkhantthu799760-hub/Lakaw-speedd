@@ -1,73 +1,68 @@
-# license.py
+# license.py (Fixed Device ID Edition)
 import os
 import json
-import base64
 import hmac
 import hashlib
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 SECRET = b"Lakaw_Secret_Key_2024"
 KEY_FILE = "license_key.txt"
+ID_FILE = "device_id.txt" # ID သိမ်းမယ့် ဖိုင်
 
 def get_device_id():
+    # ၁။ ID ဖိုင်ရှိပြီးသားလား အရင်စစ်မယ် (ရှိရင် အဲ့ဒါကိုပဲ ပြန်သုံးမယ်)
+    if os.path.exists(ID_FILE):
+        try:
+            with open(ID_FILE, "r") as f:
+                saved_id = f.read().strip()
+                if saved_id:
+                    return saved_id
+        except:
+            pass
+
+    # ၂။ မရှိသေးရင် အသစ်ထုတ်ပြီး ဖိုင်ထဲသိမ်းမယ်
     try:
-        return str(uuid.getnode()).upper()
+        new_id = str(uuid.getnode()).upper()
     except:
-        return "UNKNOWN_DEVICE"
+        new_id = "UNKNOWN_DEVICE"
+        
+    try:
+        with open(ID_FILE, "w") as f:
+            f.write(new_id)
+    except:
+        pass
+        
+    return new_id
 
 def verify_key(user_key, device_id):
     try:
-        # ၁။ KAVIN- နဲ့ စမစ စစ်မယ်
-        if not user_key.startswith("KAVIN-"):
-            return False, "Invalid key prefix"
-        
-        # ၂။ - နဲ့ ခွဲပြီး အပိုင်းတွေ စစ်မယ်
         parts = user_key.split("-")
-        if len(parts) < 3:
+        
+        if len(parts) != 5 or parts[0] != "KAVIN":
             return False, "Invalid key format"
         
-        # ၃။ နောက်ဆုံးအပိုင်းကို Signature ယူမယ်
-        sig = parts[-1]
-        # ကျန်တဲ့အပိုင်းတွေကို ပေါင်းပြီး Token ယူမယ်
-        token = "".join(parts[1:-1]) 
+        rand1 = parts[1]
+        rand2 = parts[2]
+        expiry_str = parts[3]
+        sig = parts[4]
         
-        # ၄။ Base64 Decode လုပ်မယ်
-        pad = "=" * (-len(token) % 4)
+        raw = f"{device_id}|{expiry_str}|{rand1}{rand2}"
+        expected_sig = hmac.new(SECRET, raw.encode(), hashlib.sha256).hexdigest()[:4].upper()
+        
+        if expected_sig != sig:
+            return False, "Invalid signature (Wrong Device or Key)"
+        
         try:
-            raw = base64.urlsafe_b64decode(token + pad)
-        except:
-            return False, "Invalid token format"
-        
-        # ၅။ Signature ကို စစ်မယ်
-        expected_sig = hmac.new(SECRET, raw, hashlib.sha256).hexdigest()[:16].upper()
-        if not hmac.compare_digest(expected_sig, sig):
-            return False, "Invalid signature"
-        
-        # ၆။ Payload ကို ဖတ်မယ်
-        try:
-            payload = json.loads(raw.decode())
-        except:
-            return False, "Invalid payload data"
-            
-        key_device = payload.get("d", "").upper()
-        expiry_str = payload.get("e", "")
-        
-        # ၇။ Device ID ကို စစ်မယ်
-        if key_device != device_id.upper():
-            return False, f"Key is for another device (Expected: {key_device})"
-        
-        # ၈။ သက်တမ်းကို စစ်မယ်
-        try:
-            expiry = date.fromisoformat(expiry_str)
+            expiry = datetime.strptime(expiry_str, "%Y%m%d").date()
         except:
             return False, "Invalid expiry date"
         
         if date.today() > expiry:
-            return False, f"Key expired on {expiry_str}"
+            return False, f"Key expired on {expiry.strftime('%Y-%m-%d')}"
         
         left = (expiry - date.today()).days
-        return True, f"Valid — {left} days left (Expires: {expiry_str})"
+        return True, f"Valid — {left} days left (Expires: {expiry.strftime('%Y-%m-%d')})"
         
     except Exception as e:
         return False, f"Error: {str(e)}"
