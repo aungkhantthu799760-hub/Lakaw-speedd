@@ -1,4 +1,4 @@
-# license.py (Fixed Device ID Edition)
+# license.py (Fixed ID + Show Expiry Edition)
 import os
 import json
 import hmac
@@ -11,7 +11,7 @@ KEY_FILE = "license_key.txt"
 ID_FILE = "device_id.txt" # ID သိမ်းမယ့် ဖိုင်
 
 def get_device_id():
-    # ၁။ ID ဖိုင်ရှိပြီးသားလား အရင်စစ်မယ် (ရှိရင် အဲ့ဒါကိုပဲ ပြန်သုံးမယ်)
+    # ၁။ ID ဖိုင်ရှိပြီးသားလား အရင်စစ်မယ်
     if os.path.exists(ID_FILE):
         try:
             with open(ID_FILE, "r") as f:
@@ -82,7 +82,10 @@ def check_approval():
             key = data.get("key", "")
             ok, msg = verify_key(key, dev)
             if ok:
-                print(f"✅ {msg}")
+                # ★ သက်တမ်းကျန်ရှိရက်ကို ဒီနေရာမှာ ထပ်ပြပေးမယ်
+                print(f"✅ Key Status : {msg}")
+                print(f"📅 Remaining  : {msg.split('—')[1].split('(')[0].strip()}")
+                print("-" * 50)
                 return True
             else:
                 print(f"❌ {msg}")
@@ -99,7 +102,8 @@ def check_approval():
     key = input("➜ Enter Key: ").strip()
     ok, msg = verify_key(key, dev)
     if ok:
-        print(f"\n✅ {msg}")
+        print(f"\n✅ Key Status : {msg}")
+        print(f"📅 Remaining  : {msg.split('—')[1].split('(')[0].strip()}")
         try:
             with open(KEY_FILE, "w") as f:
                 json.dump({"key": key, "device": dev}, f)
