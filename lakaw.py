@@ -1,4 +1,4 @@
-# lakaw.py (KAVIN FAST SPEED - Fast Auto-Heal Edition)
+# lakaw.py (KAVIN FAST SPEED - Clean & Simple)
 import os
 import time
 import json
@@ -10,15 +10,11 @@ import html
 import requests
 import urllib3
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, parse_qs, urljoin
 from rich.console import Console
-from rich.layout import Layout
-from rich.panel import Panel
-from rich.live import Live
-from rich.table import Table
-from rich.align import Align
 from rich.text import Text
-from rich.box import DOUBLE, HEAVY, ROUNDED, MINIMAL
+from rich.prompt import Prompt
 import license as _license
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -27,7 +23,8 @@ DB_FILE = "lakaw_data.db"
 STATE_FILE = "lakaw_state.json"
 HITS_FILE = "hits.txt"
 
-# ⚡ Speed & Anti-Ban Optimization (မြန်မြန် + IP မခံရအောင်)
+# ⚡ Speed Settings
+MAX_WORKERS = 5
 BASE_SLEEP_MIN = 0.01
 BASE_SLEEP_MAX = 0.03
 RATE_LIMIT_SLEEP = 45
@@ -177,47 +174,52 @@ def gen_code(mode, length):
     except Exception: pass
     return ""
 
-def make_layout(mode_name, current_code, tested, elapsed, status, hits, running_logs, speed):
-    layout = Layout()
-    layout.split_column(
-        Layout(name="header", size=4),
-        Layout(name="stats", size=5),
-        Layout(name="logs_hits", ratio=1),
-    )
-
-    header_text = Text("⚡ KAVIN FAST SPEED ⚡", style="bold bright_white on dark_blue", justify="center")
-    layout["header"].update(Panel(Align.center(header_text), border_style="bright_blue", box=DOUBLE))
+# 🎨 Clean & Simple Dashboard
+def render_dashboard(mode, current_code, tested, elapsed, status, hits, logs, speed):
+    clear_screen()
+    console.print()
+    console.print(Text("══════════════════════════════════════", style="bold bright_cyan"), justify="center")
+    console.print(Text("⚡ KAVIN FAST SPEED ⚡", style="bold bright_white"), justify="center")
+    console.print(Text("══════════════════════════════════════", style="bold bright_cyan"), justify="center")
+    console.print()
 
     status_color = "bright_green" if status == "Active" else ("bright_red" if status == "Limit" else "bright_yellow")
-    stats_text = Text.assemble(
-        ("  🎯 CODE  : ", "bright_white"), (f"{current_code}\n", "bold bright_cyan"),
-        ("  📊 TRIED : ", "bright_white"), (f"{tested:,}  ", "bold bright_yellow"),
-        ("  ⚡ SPEED : ", "bright_white"), (f"{speed:.1f} /m\n", "bold bright_magenta"),
-        ("  ⏱ TIME  : ", "bright_white"), (f"{elapsed}  ", "bold bright_blue"),
-        ("  📡 STATUS: ", "bright_white"), (f"{status}\n", f"bold {status_color}"),
-    )
-    layout["stats"].update(Panel(Align.center(stats_text), border_style="cyan", box=HEAVY))
 
-    lower_layout = Layout()
-    lower_layout.split_row(Layout(name="logs", ratio=1), Layout(name="hits", ratio=1))
+    console.print(Text.assemble(
+        ("  🎯 Code   : ", "bright_white"), (f"{current_code}\n", "bold bright_green"),
+        ("  📊 Tested : ", "bright_white"), (f"{tested:,}\n", "bold bright_yellow"),
+        ("  ⚡ Speed  : ", "bright_white"), (f"{speed:.1f} c/m\n", "bold bright_cyan"),
+        ("  ⏱ Time   : ", "bright_white"), (f"{elapsed}\n", "bold bright_blue"),
+        ("  📡 Status : ", "bright_white"), (f"{status.upper()}\n", f"bold {status_color}"),
+        ("  🏆 Hits   : ", "bright_white"), (f"{len(hits)}\n", "bold bright_magenta"),
+    ))
 
-    log_text = Text()
-    for lg in running_logs[-6:]:
-        log_text.append(Text.from_markup(lg))
-        log_text.append("\n")
-    if not running_logs: log_text.append("[dim]Waiting...[/dim]")
-    lower_layout["logs"].update(Panel(log_text, title="[bold]📡 Logs[/bold]", border_style="bright_green", box=ROUNDED))
+    console.print(Text("──────────────────────────────────────", style="dim bright_cyan"))
+    console.print(Text("  📜 Recent Logs", style="bold bright_yellow"))
+    console.print(Text("──────────────────────────────────────", style="dim bright_cyan"))
+    
+    for lg in logs[-4:]:
+        console.print(Text.from_markup(f"  {lg}"))
+    if not logs:
+        console.print(Text("  Waiting...", style="dim"))
 
-    hits_text = Text()
-    last_hits = hits[-5:]
-    for i, h in enumerate(last_hits, 1):
-        c = h.get("code", "") if isinstance(h, dict) else h
-        hits_text.append(f"{i}. {c}\n", style="bold bright_yellow")
-    if not last_hits: hits_text.append("[dim]Searching...[/dim]")
-    lower_layout["hits"].update(Panel(hits_text, title="[bold]🏆 Hits[/bold]", border_style="bright_magenta", box=ROUNDED))
+    console.print(Text("──────────────────────────────────────", style="dim bright_cyan"))
+    console.print(Text("  💎 Valid Codes Found", style="bold bright_yellow"))
+    console.print(Text("──────────────────────────────────────", style="dim bright_cyan"))
 
-    layout["logs_hits"].update(lower_layout)
-    return layout
+    last_hits = hits[-3:]
+    if last_hits:
+        for i, h in enumerate(last_hits, 1):
+            c = h.get("code", "") if isinstance(h, dict) else h
+            t = h.get("time", "--:--:--") if isinstance(h, dict) else "--:--:--"
+            console.print(Text.assemble(
+                (f"  {i}. ", "dim white"),
+                (f"{c}", "bold bright_green"),
+                (f"   [{t}]", "dim bright_cyan")
+            ))
+    else:
+        console.print(Text("  Searching...", style="dim"))
+    console.print()
 
 def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0, start_hits=None):
     mode_str = f"{mode}_{length}"
@@ -225,29 +227,19 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
     running_logs, tested = [], start_tested
     start_time, portal_base, session_id, net_error_streak = time.time(), None, None, 0
     conn = init_db()
-    live, live_cm = None, None
-
-    try:
-        initial = make_layout(mode_str, "------", tested, "00:00:00", "--", hits, running_logs, 0.0)
-        live_cm = Live(initial, refresh_per_second=4, screen=True)
-        live = live_cm.__enter__()
-    except Exception: pass
-
-    def _update(code, status, current_speed):
-        if live is None: return
-        try: live.update(make_layout(mode_str, code, tested, format_time(time.time() - start_time), status, hits, running_logs, current_speed))
-        except Exception: pass
-
-    def push_log(msg): running_logs.append(f"[dim]{time.strftime('%H:%M:%S')}[/dim] {msg}")
-
+    current_code = [""]
     last_time, speed_counter, current_speed = time.time(), 0, 0.0
 
+    def push_log(msg): running_logs.append(f"[dim]{time.strftime('%H:%M:%S')}[/dim] {msg}")
+    def update_ui(status):
+        render_dashboard(mode_str, current_code[0], tested, format_time(time.time() - start_time), status, hits, running_logs, current_speed)
+
     try:
-        push_log("[bold bright_cyan]System Online. Fast Engine Started...[/bold bright_cyan]")
+        push_log("[bright_cyan]Engine Started...[/bright_cyan]")
         while True:
             try:
                 if not session_id or not portal_base:
-                    _update("------", "--", current_speed)
+                    update_ui("Init")
                     portal_base, session_id = fetch_session(custom_url)
                     if not session_id:
                         time.sleep(SESSION_REFRESH_SLEEP)
@@ -255,179 +247,145 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
                         session_id = "auto_session"
                     net_error_streak = 0
 
-                code = gen_code(mode, length)
-                if not code or is_tried(conn, code): continue
+                batch_codes = []
+                while len(batch_codes) < MAX_WORKERS * 2:
+                    c = gen_code(mode, length)
+                    if c and not is_tried(conn, c):
+                        mark_tried(conn, c)
+                        batch_codes.append(c)
 
-                mark_tried(conn, code)
-                tested += 1
-                save_state(mode_str, tested, hits, custom_url, scan_method)
+                if not batch_codes: continue
+                success_hit = False
 
-                speed_counter += 1
-                now = time.time()
-                if now - last_time >= 1.0:
-                    current_speed = (speed_counter / (now - last_time)) * 60
-                    speed_counter, last_time = 0, now
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                    futures = {executor.submit(test_code, portal_base, session_id, code): code for code in batch_codes}
 
-                push_log(f"Testing: [yellow]{code}[/yellow]")
-                _update(code, "Active", current_speed)
-
-                res = test_code(portal_base, session_id, code)
-                low = (res or "").lower()
-
-                if res == "__NETWORK_ERROR__" or res == "":
-                    net_error_streak += 1
-                    time.sleep(NETWORK_RETRY_SLEEP)
-                    if net_error_streak >= 5:
-                        push_log(f"[bold red]⚠️ Network Issues! Reconnecting...[/bold red]")
-                        session_id = None
-                        net_error_streak = 0
-                    continue
-
-                net_error_streak = 0
-
-                if ("request limited" in low or "blocked" in low or "too many" in low or '"limit"' in low or "forbidden" in low):
-                    _update(code, "Limit", current_speed)
-                    push_log(f"[bold red]🛡️ Block Detected! Changing Session...[/bold red]")
-                    time.sleep(RATE_LIMIT_SLEEP)
-                    session_id = None
-                    continue
-
-                if ("session timed out" in low or "session timeout" in low or '"session":null' in low):
-                    session_id = None
-                    continue
-
-                if '"success":true' in low or '"authresult":"1"' in low:
-                    existing = hits_codes_only(hits)
-                    if code not in existing:
-                        now_str = time.strftime("%H:%M:%S")
-                        hits.append({"code": code, "time": now_str})
-                        push_log(f"[bold bright_green]✨ VOUCHER FOUND: {code}[/bold bright_green]")
+                    for future in as_completed(futures):
+                        code = futures[future]
+                        tested += 1
+                        current_code[0] = code
                         try:
-                            with open(HITS_FILE, "a", encoding="utf-8") as f: f.write(f"[{now_str}] CODE: {code}\n")
-                        except Exception: pass
-                        save_state(mode_str, tested, hits, custom_url, scan_method)
-                    _update(code, "Active", current_speed)
-                    time.sleep(BASE_SLEEP_MIN)
-                    continue
+                            res = future.result()
+                        except Exception:
+                            continue
 
-                time.sleep(BASE_SLEEP_MIN + random.uniform(0, BASE_SLEEP_MAX))
+                        low = (res or "").lower()
+                        elapsed_total = time.time() - start_time
+                        current_speed = (tested / elapsed_total * 60) if elapsed_total > 0 else 0.0
+
+                        push_log(f"Testing: [yellow]{code}[/yellow]")
+                        update_ui("Active")
+
+                        if "request limited" in low or "blocked" in low or "too many" in low or '"limit"' in low:
+                            update_ui("Limit")
+                            push_log(f"[bold red]🛡️ Block Detected! Sleeping...[/bold red]")
+                            time.sleep(RATE_LIMIT_SLEEP)
+                            session_id = None
+                            success_hit = True
+                            break
+
+                        if "session timed out" in low or "session timeout" in low or '"session":null' in low:
+                            session_id = None
+                            break
+
+                        if '"success":true' in low or '"authresult":"1"' in low:
+                            existing = hits_codes_only(hits)
+                            if code not in existing:
+                                now_str = time.strftime("%H:%M:%S")
+                                hits.append({"code": code, "time": now_str})
+                                push_log(f"[bold bright_green]✨ VOUCHER FOUND: {code}[/bold bright_green]")
+                                try:
+                                    with open(HITS_FILE, "a", encoding="utf-8") as f: f.write(f"[{now_str}] CODE: {code}\n")
+                                except Exception: pass
+                                save_state(mode_str, tested, hits, custom_url, scan_method)
+                            update_ui("Active")
+                            success_hit = True
+                            break
+
+                save_state(mode_str, tested, hits, custom_url, scan_method)
+                if success_hit: time.sleep(0.1)
 
             except KeyboardInterrupt: raise
             except Exception:
                 time.sleep(NETWORK_RETRY_SLEEP)
                 continue
-    finally:
-        if live_cm is not None:
-            try: live_cm.__exit__(None, None, None)
-            except Exception: pass
+    except KeyboardInterrupt:
+        pass
 def show_banner():
     clear_screen()
-    try:
-        banner = Text()
-        banner.append("🔥 KAVIN FAST SPEED 🔥\n", style="bold bright_cyan")
-        banner.append("💬 BOT CONTROLLER & VOUCHER HUNTER", style="bold bright_yellow")
-        console.print(Panel(Align.center(banner), border_style="cyan", box=HEAVY))
-        console.print()
-    except Exception: pass
+    console.print()
+    console.print(Text("══════════════════════════════════════", style="bold bright_cyan"), justify="center")
+    console.print(Text("⚡ KAVIN FAST SPEED ⚡", style="bold bright_white"), justify="center")
+    console.print(Text("══════════════════════════════════════", style="bold bright_cyan"), justify="center")
+    console.print()
 
 def ask_mode():
     while True:
         show_banner()
-        try:
-            menu = Text()
-            menu.append("  [1] 🔢  NUMERIC COMMAND\n", style="bold bright_white")
-            menu.append("  [2] 🔤  ALPHABET COMMAND\n", style="bold bright_white")
-            menu.append("  [3] 🔀  HYBRID MIX COMMAND\n", style="bold bright_white")
-            menu.append("  [0] ❌  SHUTDOWN BOT\n", style="bold bright_red")
-            console.print(Panel(menu, title="[bold bright_yellow] SELECT BOT COMMAND [/bold bright_yellow]", border_style="bright_yellow", box=DOUBLE))
-            choice = input("➜ Select Option: ").strip()
-        except KeyboardInterrupt: raise
-        except Exception: return None
+        console.print("  [bold bright_cyan]1.[/bold bright_cyan] 🔢  Number Mode")
+        console.print("  [bold bright_cyan]2.[/bold bright_cyan] 🔤  Alphabet Mode")
+        console.print("  [bold bright_cyan]3.[/bold bright_cyan] 🔀  Mixed Mode")
+        console.print("  [bold bright_red]0.[/bold bright_red] ❌  Exit")
+        console.print()
+        choice = Prompt.ask("  [bright_cyan]➜ Select[/bright_cyan]").strip()
 
         if choice == "0": return None
         if choice not in ("1", "2", "3"):
-            try:
-                console.print("[bold bright_red]❌ Invalid Command! Select 1, 2, 3 or 0.[/bold bright_red]")
-                time.sleep(1)
-            except Exception: pass
+            console.print("  [bold red]Invalid![/bold red]")
+            time.sleep(1)
             continue
         return {"1": "num", "2": "eng", "3": "mix"}[choice]
 
 def ask_length(mode):
     while True:
-        clear_screen()
-        try:
-            console.print(Panel(Align.center(Text(f"🎯 ACTIVE COMMAND: /start_{mode}", style="bold bright_white on dark_blue")), border_style="blue", box=HEAVY))
-            console.print()
-            menu = Text()
-            for i in range(6, 10):
-                menu.append(f"  [{i}] ⚡  {i} CHARACTERS LENGTH\n", style="bold bright_white")
-            menu.append("  [0] ⬅  BACK TO MENU\n", style="bold bright_red")
-            console.print(Panel(menu, title="[bold bright_yellow] SELECT KEY LENGTH [/bold bright_yellow]", border_style="bright_yellow", box=DOUBLE))
-            length = input("➜ Select Length: ").strip()
-        except KeyboardInterrupt: raise
-        except Exception: return None
+        show_banner()
+        console.print(f"  Mode: [bold yellow]{mode.upper()}[/bold yellow]\n")
+        for i in range(6, 10):
+            console.print(f"  [bold bright_cyan]{i}.[/bold bright_cyan] ⚡ {i} Characters")
+        console.print("  [bold bright_red]0.[/bold bright_red] ⬅ Back")
+        console.print()
+        length = Prompt.ask("  [bright_cyan]➜ Select[/bright_cyan]").strip()
 
         if length == "0": return None
         if length not in ("6", "7", "8", "9"):
-            try:
-                console.print("[bold bright_red]❌ Invalid Length! Choose 6 to 9.[/bold bright_red]")
-                time.sleep(1)
-            except Exception: pass
+            console.print("  [bold red]Invalid![/bold red]")
+            time.sleep(1)
             continue
         return int(length)
 
 def ask_scan_method():
     while True:
-        clear_screen()
-        try:
-            console.print(Panel(Align.center(Text("🎯 SELECT SCAN METHOD", style="bold bright_white on dark_blue")), border_style="blue", box=HEAVY))
-            console.print()
-            menu = Text()
-            menu.append("  [1] 🎲  RANDOM (ကျပန်း)\n", style="bold bright_white")
-            menu.append("  [2] 📈  SEQUENTIAL (အစဉ်လိုက်)\n", style="bold bright_white")
-            menu.append("  [0] ⬅  BACK TO MENU\n", style="bold bright_red")
-            console.print(Panel(menu, title="[bold bright_yellow] SELECT SCAN METHOD [/bold bright_yellow]", border_style="bright_yellow", box=DOUBLE))
-            choice = input("➜ Select Method: ").strip()
-        except KeyboardInterrupt: raise
-        except Exception: return "random"
+        show_banner()
+        console.print("  [bold bright_cyan]1.[/bold bright_cyan] 🎲  Random Mode")
+        console.print("  [bold bright_cyan]2.[/bold bright_cyan] 📈  Sequential Mode")
+        console.print("  [bold bright_red]0.[/bold bright_red] ⬅  Back")
+        console.print()
+        choice = Prompt.ask("  [bright_cyan]➜ Select[/bright_cyan]").strip()
 
         if choice == "0": return None
         if choice not in ("1", "2"):
-            try:
-                console.print("[bold bright_red]❌ Invalid! Choose 1 or 2.[/bold bright_red]")
-                time.sleep(1)
-            except Exception: pass
+            console.print("  [bold red]Invalid![/bold red]")
+            time.sleep(1)
             continue
         return {"1": "random", "2": "sequential"}[choice]
 
 def ask_url_method():
     while True:
-        clear_screen()
-        try:
-            console.print(Panel(Align.center(Text("🌐 URL METHOD", style="bold bright_white on dark_blue")), border_style="blue", box=HEAVY))
-            console.print()
-            menu = Text()
-            menu.append("  [1] 📝  MANUAL (IP ကိုယ်တိုင်ထည့်)\n", style="bold bright_white")
-            menu.append("  [2] 🔄  AUTO (အလိုအလျောက်ရှာ)\n", style="bold bright_white")
-            menu.append("  [0] ⬅  BACK TO MENU\n", style="bold bright_red")
-            console.print(Panel(menu, title="[bold bright_yellow] SELECT URL METHOD [/bold bright_yellow]", border_style="bright_yellow", box=DOUBLE))
-            choice = input("➜ Select Method: ").strip()
-        except KeyboardInterrupt: raise
-        except Exception: return ("", "")
+        show_banner()
+        console.print("  [bold bright_cyan]1.[/bold bright_cyan] 📝  Manual URL (Enter IP)")
+        console.print("  [bold bright_cyan]2.[/bold bright_cyan] 🔄  Auto Detect URL")
+        console.print("  [bold bright_red]0.[/bold bright_red] ⬅  Back")
+        console.print()
+        choice = Prompt.ask("  [bright_cyan]➜ Select[/bright_cyan]").strip()
 
         if choice == "0": return None
         if choice == "1":
-            custom_url = input("➜ IP / URL: ").strip()
-            return (custom_url, "manual")
+            url = Prompt.ask("  [bright_cyan]➜ IP[/bright_cyan]").strip()
+            return (url, "manual")
         if choice == "2":
             return ("", "auto")
-        
-        try:
-            console.print("[bold bright_red]❌ Invalid! Choose 1 or 2.[/bold bright_red]")
-            time.sleep(1)
-        except Exception: pass
-        continue
+        console.print("  [bold red]Invalid![/bold red]")
+        time.sleep(1)
 
 def run():
     state = load_state()
@@ -439,26 +397,13 @@ def run():
             custom_url = state.get("custom_url", "")
             scan_method = state.get("scan_method", "random")
 
-            clear_screen()
-            console.print(Panel(Align.center(Text("💾 RESTORING BOT SESSION", style="bold bright_white on dark_red")), border_style="red", box=DOUBLE))
-            console.print()
-
-            info = Text()
-            info.append("  🎯 Mode       : ", style="cyan")
-            info.append(f"{m.upper()} {l}\n", style="bold white")
-            info.append("  🧭 Method     : ", style="cyan")
-            info.append(f"{scan_method.upper()}\n", style="bold white")
-            info.append("  🌐 URL        : ", style="cyan")
-            info.append(f"{custom_url or 'Auto'}\n", style="bold white")
-            info.append("  📊 Tested     : ", style="cyan")
-            info.append(f"{tested:,}\n", style="bold white")
-            info.append("  🎁 Hits       : ", style="cyan")
-            info.append(f"{len(hits)}\n", style="bold green")
-            console.print(Panel(info, title="Bot Session State", border_style="green", box=ROUNDED))
-            console.print()
-
-            ans = input("➜ Resume previous bot session? (y/n): ").strip().lower()
-
+            show_banner()
+            console.print("  [bold yellow]💾 Previous Session Found[/bold yellow]\n")
+            console.print(f"  Mode   : [bold white]{m.upper()} {l}[/bold white]")
+            console.print(f"  Tested : [bold white]{tested:,}[/bold white]")
+            console.print(f"  Hits   : [bold green]{len(hits)}[/bold green]\n")
+            
+            ans = Prompt.ask("  [bright_cyan]➜ Resume? (y/n)[/bright_cyan]").strip().lower()
             if ans in ("", "y", "yes"):
                 scan_loop(m, int(l), custom_url, scan_method, start_tested=tested, start_hits=hits)
                 return
@@ -478,7 +423,7 @@ def run():
 
         url_choice = ask_url_method()
         if url_choice is None: continue
-        custom_url, url_mode = url_choice
+        custom_url, _ = url_choice
 
         scan_loop(mode, length, custom_url, method)
         return
@@ -492,16 +437,11 @@ def main():
         try: clear_screen()
         except BaseException: pass
         try:
-            bye = Text()
-            bye.append("\n\n")
-            bye.append("🔥 KAVIN FAST SPEED 🔥\n", style="bold bright_cyan")
-            bye.append("🙏 ကျေးဇူးတင်ပါတယ်ဗျ။ Bot stopped safely. ✨", style="bold bright_yellow")
-            bye.append("\n\n")
-            console.print(Align.center(bye))
+            console.print("\n\n")
+            console.print(Text("🙏 ကျေးဇူးတင်ပါတယ်ဗျ။ ✨", style="bold bright_green"), justify="center")
+            console.print("\n\n")
             time.sleep(2)
-        except BaseException:
-            try: print("\n\n🔥 KAVIN FAST SPEED 🔥\n🙏 ကျေးဇူးတင်ပါတယ်ဗျ။")
-            except BaseException: pass
+        except BaseException: pass
 
 if __name__ == "__main__":
     main()
