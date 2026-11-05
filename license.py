@@ -1,4 +1,4 @@
-# license.py (Fixed ID + Show Expiry Edition)
+# license.py (Fixed Device ID Edition)
 import os
 import json
 import hmac
@@ -8,10 +8,9 @@ from datetime import date, datetime
 
 SECRET = b"Lakaw_Secret_Key_2024"
 KEY_FILE = "license_key.txt"
-ID_FILE = "device_id.txt" # ID သိမ်းမယ့် ဖိုင်
+ID_FILE = "device_id.txt" 
 
 def get_device_id():
-    # ၁။ ID ဖိုင်ရှိပြီးသားလား အရင်စစ်မယ်
     if os.path.exists(ID_FILE):
         try:
             with open(ID_FILE, "r") as f:
@@ -21,11 +20,10 @@ def get_device_id():
         except:
             pass
 
-    # ၂။ မရှိသေးရင် အသစ်ထုတ်ပြီး ဖိုင်ထဲသိမ်းမယ်
     try:
-        new_id = str(uuid.getnode()).upper()
+        new_id = str(uuid.uuid4()).replace("-", "").upper()[:16]
     except:
-        new_id = "UNKNOWN_DEVICE"
+        new_id = "KAVIN_DEVICE_01"
         
     try:
         with open(ID_FILE, "w") as f:
@@ -38,34 +36,30 @@ def get_device_id():
 def verify_key(user_key, device_id):
     try:
         parts = user_key.split("-")
-        
         if len(parts) != 5 or parts[0] != "KAVIN":
-            return False, "Invalid key format"
+            return False, "Invalid key format", 0
         
-        rand1 = parts[1]
-        rand2 = parts[2]
-        expiry_str = parts[3]
-        sig = parts[4]
+        rand1, rand2, expiry_str, sig = parts[1], parts[2], parts[3], parts[4]
         
         raw = f"{device_id}|{expiry_str}|{rand1}{rand2}"
         expected_sig = hmac.new(SECRET, raw.encode(), hashlib.sha256).hexdigest()[:4].upper()
         
         if expected_sig != sig:
-            return False, "Invalid signature (Wrong Device or Key)"
+            return False, "Invalid signature (Wrong Device or Key)", 0
         
         try:
             expiry = datetime.strptime(expiry_str, "%Y%m%d").date()
         except:
-            return False, "Invalid expiry date"
+            return False, "Invalid expiry date", 0
         
         if date.today() > expiry:
-            return False, f"Key expired on {expiry.strftime('%Y-%m-%d')}"
+            return False, f"Key expired on {expiry.strftime('%Y-%m-%d')}", 0
         
         left = (expiry - date.today()).days
-        return True, f"Valid — {left} days left (Expires: {expiry.strftime('%Y-%m-%d')})"
+        return True, f"{left} Days Left (Exp: {expiry.strftime('%Y-%m-%d')})", left
         
     except Exception as e:
-        return False, f"Error: {str(e)}"
+        return False, f"Error: {str(e)}", 0
 
 def check_approval():
     print("\n" + "=" * 50)
@@ -80,13 +74,11 @@ def check_approval():
             with open(KEY_FILE) as f:
                 data = json.load(f)
             key = data.get("key", "")
-            ok, msg = verify_key(key, dev)
+            ok, msg, days = verify_key(key, dev)
             if ok:
-                # ★ သက်တမ်းကျန်ရှိရက်ကို ဒီနေရာမှာ ထပ်ပြပေးမယ်
-                print(f"✅ Key Status : {msg}")
-                print(f"📅 Remaining  : {msg.split('—')[1].split('(')[0].strip()}")
+                print(f"✅ License Valid: {msg}")
                 print("-" * 50)
-                return True
+                return True, msg
             else:
                 print(f"❌ {msg}")
                 print("🗑️ Invalid key found. Please re-enter.")
@@ -100,23 +92,19 @@ def check_approval():
     print("─" * 50 + "\n")
 
     key = input("➜ Enter Key: ").strip()
-    ok, msg = verify_key(key, dev)
+    ok, msg, days = verify_key(key, dev)
     if ok:
-        print(f"\n✅ Key Status : {msg}")
-        print(f"📅 Remaining  : {msg.split('—')[1].split('(')[0].strip()}")
+        print(f"\n✅ License Valid: {msg}")
         try:
             with open(KEY_FILE, "w") as f:
                 json.dump({"key": key, "device": dev}, f)
         except Exception:
             pass
-        return True
+        return True, msg
     else:
         print(f"\n❌ {msg}")
         input("Press Enter to exit...")
-        return False
+        return False, ""
 
 if __name__ == "__main__":
-    if check_approval():
-        print("✅ License check passed.")
-    else:
-        print("❌ License check failed.")
+    check_approval()
