@@ -1,4 +1,4 @@
-# lakaw.py (KAVIN FAST SPEED - Premium Cyber Edition)
+# lakaw.py (KAVIN FAST SPEED - Dark Matrix Terminal)
 import os
 import time
 import json
@@ -12,13 +12,8 @@ import urllib3
 import sys
 from urllib.parse import urlparse, parse_qs, urljoin
 from rich.console import Console
-from rich.layout import Layout
-from rich.panel import Panel
-from rich.live import Live
-from rich.table import Table
-from rich.align import Align
 from rich.text import Text
-from rich.box import DOUBLE, HEAVY, ROUNDED, MINIMAL
+from rich.prompt import Prompt
 import license as _license
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -27,9 +22,9 @@ DB_FILE = "lakaw_data.db"
 STATE_FILE = "lakaw_state.json"
 HITS_FILE = "hits.txt"
 
-# ⚡ Premium Speed & Anti-Ban Settings
-BASE_SLEEP_MIN = 0.01
-BASE_SLEEP_MAX = 0.03
+# ⚡ Speed & Anti-Ban Optimization
+BASE_SLEEP_MIN = 0.02
+BASE_SLEEP_MAX = 0.05
 RATE_LIMIT_SLEEP = 30
 NETWORK_RETRY_SLEEP = 1.0
 SESSION_REFRESH_SLEEP = 1.0
@@ -177,66 +172,50 @@ def gen_code(mode, length):
     except Exception: pass
     return ""
 
-def make_layout(mode_name, current_code, tested, elapsed, status, hits, running_logs, speed):
-    layout = Layout()
-    layout.split_column(
-        Layout(name="top", size=5),
-        Layout(name="body", ratio=1),
-        Layout(name="bottom", size=8),
+# 🎨 Dark Matrix Terminal Layout
+def render_dashboard(mode_name, current_code, tested, elapsed, status, hits, logs, speed):
+    clear_screen()
+    console.print()
+    console.print(Text("╔══════════════════════════════════════════════════════════════╗", style="bold bright_green"))
+    console.print(Text("║            ⚡ K A V I N   F A S T   S P E E D ⚡             ║", style="bold bright_cyan"))
+    console.print(Text("║               [ D A R K   M A T R I X ]                      ║", style="bold bright_magenta"))
+    console.print(Text("╚══════════════════════════════════════════════════════════════╝", style="bold bright_green"))
+    console.print()
+
+    # Stats Grid (No box borders)
+    stats = Text.assemble(
+        ("  [", "dim white"), ("1", "bold bright_red"), ("] MODE   : ", "bright_white"), (f"{mode_name.upper()}\n", "bold bright_yellow"),
+        ("  [", "dim white"), ("2", "bold bright_red"), ("] STATUS : ", "bright_white"), (f"{status.upper()}\n", "bold bright_green" if status == "Active" else "bold bright_red"),
+        ("  [", "dim white"), ("3", "bold bright_red"), ("] CODE   : ", "bright_white"), (f"{current_code}\n", "bold bright_cyan"),
+        ("  [", "dim white"), ("4", "bold bright_red"), ("] SPEED  : ", "bright_white"), (f"{speed:.1f} /min\n", "bold bright_magenta"),
+        ("  [", "dim white"), ("5", "bold bright_red"), ("] TRIED  : ", "bright_white"), (f"{tested:,}\n", "bold bright_yellow"),
+        ("  [", "dim white"), ("6", "bold bright_red"), ("] TIME   : ", "bright_white"), (f"{elapsed}\n", "bold bright_blue"),
+        ("  [", "dim white"), ("7", "bold bright_red"), ("] HITS   : ", "bright_white"), (f"{len(hits)}\n", "bold bright_green"),
     )
+    console.print(stats)
     
-    layout["body"].split_row(
-        Layout(name="left", ratio=1),
-        Layout(name="right", ratio=1)
-    )
-
-    # ================= TOP HEADER =================
-    header_text = Text.assemble(
-        ("▀▄▀▄ ", "bold magenta"), ("K A V I N   F A S T   S P E E D", "bold cyan"), (" ▄▀▄▀\n", "bold magenta"),
-        ("  [ PREMIUM VOUCHER SCANNER ]  ", "bold yellow")
-    )
-    layout["top"].update(Panel(Align.center(header_text), border_style="magenta", box=DOUBLE))
-
-    # ================= LEFT (STATS) =================
-    stats_table = Table.grid(padding=1, expand=True)
-    stats_table.add_column(justify="left", ratio=1)
-    stats_table.add_column(justify="right", ratio=1)
+    console.print(Text("────────────────────────────────────────────────────────────────", style="dim bright_green"))
+    console.print(Text(" 📡 LIVE LOGS", style="bold bright_cyan"))
+    console.print(Text("────────────────────────────────────────────────────────────────", style="dim bright_green"))
     
-    stats_table.add_row("⚡ SPEED ", f"[bold yellow]{speed:.1f} /m[/bold yellow]")
-    stats_table.add_row("🎯 CURRENT ", f"[bold bright_green]{current_code if current_code else 'WAITING...'}[/bold bright_green]")
-    stats_table.add_row("🏹 TRIED ", f"[bold cyan]{tested:,}[/bold cyan]")
+    for lg in logs[-6:]:
+        console.print(Text.from_markup(f"  {lg}"))
+    if not logs:
+        console.print(Text("  Waiting for data...", style="dim"))
+        
+    console.print(Text("────────────────────────────────────────────────────────────────", style="dim bright_green"))
+    console.print(Text(" 💎 TREASURE VAULT", style="bold bright_yellow"))
+    console.print(Text("────────────────────────────────────────────────────────────────", style="dim bright_green"))
     
-    status_color = "green" if status == "Active" else ("red" if status == "Limit" else "yellow")
-    stats_table.add_row("📡 STATUS ", f"[bold {status_color}]{status.upper()}[/bold {status_color}]")
-    stats_table.add_row("⏱ TIME ", f"[bold magenta]{elapsed}[/bold magenta]")
-    
-    layout["left"].update(Panel(stats_table, title="[bold cyan]>>> SYSTEM MONITOR[/bold cyan]", border_style="cyan", box=HEAVY))
-
-    # ================= RIGHT (LOGS) =================
-    log_text = Text()
-    for lg in running_logs[-6:]:
-        log_text.append(Text.from_markup(lg))
-        log_text.append("\n")
-    if not running_logs: log_text.append("[dim]Initializing...[/dim]")
-    
-    layout["right"].update(Panel(log_text, title="[bold blue]>>> LIVE ACTIVITY[/bold blue]", border_style="blue", box=HEAVY))
-
-    # ================= BOTTOM (HITS) =================
-    hits_table = Table(show_header=True, header_style="bold yellow", box=HEAVY, expand=True)
-    hits_table.add_column("IDX", width=5, justify="center")
-    hits_table.add_column("SECURED VOUCHER", justify="center")
-    hits_table.add_column("TIME", justify="center")
-
     last_hits = hits[-5:]
-    for i, h in enumerate(last_hits, 1):
-        c = h.get("code", "") if isinstance(h, dict) else h
-        t = h.get("time", "--:--:--") if isinstance(h, dict) else "--:--:--"
-        hits_table.add_row(str(i), f"[bold bright_green]👑 {c} 👑[/bold bright_green]", f"[dim cyan]{t}[/dim cyan]")
-
-    if not last_hits: hits_table.add_row("-", "[dim]SEARCHING...[/dim]", "-")
-
-    layout["bottom"].update(Panel(hits_table, title=f"[bold yellow]>>> TREASURE VAULT ({len(hits)})[/bold yellow]", border_style="yellow", box=HEAVY))
-    return layout
+    if last_hits:
+        for i, h in enumerate(last_hits, 1):
+            c = h.get("code", "") if isinstance(h, dict) else h
+            t = h.get("time", "--:--:--") if isinstance(h, dict) else "--:--:--"
+            console.print(Text(f"  {i}. 👑 {c} 👑", style="bold bright_green"), Text(f"  [{t}]", style="dim cyan"))
+    else:
+        console.print(Text("  🔍 SEARCHING...", style="dim"))
+    console.print()
 
 def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0, start_hits=None):
     mode_str = f"{mode}_{length}"
@@ -244,29 +223,20 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
     running_logs, tested = [], start_tested
     start_time, portal_base, session_id, net_error_streak = time.time(), None, None, 0
     conn = init_db()
-    live, live_cm = None, None
-
-    try:
-        initial = make_layout(mode_str, "------", tested, "00:00:00", "--", hits, running_logs, 0.0)
-        live_cm = Live(initial, refresh_per_second=10, screen=True)
-        live = live_cm.__enter__()
-    except Exception: pass
-
-    def _update(code, status, current_speed):
-        if live is None: return
-        try: live.update(make_layout(mode_str, code, tested, format_time(time.time() - start_time), status, hits, running_logs, current_speed))
-        except Exception: pass
 
     def push_log(msg): running_logs.append(f"[dim]{time.strftime('%H:%M:%S')}[/dim] {msg}")
+    def update_ui(status, speed):
+        render_dashboard(mode_str, current_code[0] if current_code else "WAITING...", tested, format_time(time.time() - start_time), status, hits, running_logs, speed)
 
     last_time, speed_counter, current_speed = time.time(), 0, 0.0
+    current_code = [""]
 
     try:
-        push_log(f"[bold bright_cyan]System Online | Method: {scan_method.upper()}[/bold bright_cyan]")
+        push_log("[bold bright_green]Terminal Online. Initializing...[/bold bright_green]")
         while True:
             try:
                 if not session_id or not portal_base:
-                    _update("------", "--", current_speed)
+                    update_ui("INIT", current_speed)
                     portal_base, session_id = fetch_session(custom_url)
                     if not session_id:
                         time.sleep(SESSION_REFRESH_SLEEP)
@@ -276,6 +246,7 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
 
                 code = gen_code(mode, length)
                 if not code or is_tried(conn, code): continue
+                current_code[0] = code
 
                 mark_tried(conn, code)
                 tested += 1
@@ -288,7 +259,7 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
                     speed_counter, last_time = 0, now
 
                 push_log(f"Testing: [yellow]{code}[/yellow]")
-                _update(code, "Active", current_speed)
+                update_ui("ACTIVE", current_speed)
 
                 res = test_code(portal_base, session_id, code)
                 low = (res or "").lower()
@@ -305,8 +276,8 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
                 net_error_streak = 0
 
                 if ("request limited" in low or "blocked" in low or "too many" in low or '"limit"' in low or "forbidden" in low):
-                    _update(code, "Limit", current_speed)
-                    push_log(f"[bold red]🛡️ Block Detected! Auto-changing Session...[/bold red]")
+                    update_ui("LIMIT", current_speed)
+                    push_log(f"[bold red]🛡️ Block Detected! Changing Session...[/bold red]")
                     time.sleep(RATE_LIMIT_SLEEP)
                     session_id = None
                     continue
@@ -320,12 +291,12 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
                     if code not in existing:
                         now_str = time.strftime("%H:%M:%S")
                         hits.append({"code": code, "time": now_str})
-                        push_log(f"[bold bright_green]✨ VOUCHER FOUND: {code}[/bold bright_green]")
+                        push_log(f"[bold bright_green]✨ HIT: {code}[/bold bright_green]")
                         try:
                             with open(HITS_FILE, "a", encoding="utf-8") as f: f.write(f"[{now_str}] CODE: {code}\n")
                         except Exception: pass
                         save_state(mode_str, tested, hits, custom_url, scan_method)
-                    _update(code, "Active", current_speed)
+                    update_ui("ACTIVE", current_speed)
                     time.sleep(BASE_SLEEP_MIN)
                     continue
 
@@ -335,118 +306,84 @@ def scan_loop(mode, length, custom_url="", scan_method="random", start_tested=0,
             except Exception:
                 time.sleep(NETWORK_RETRY_SLEEP)
                 continue
-    finally:
-        if live_cm is not None:
-            try: live_cm.__exit__(None, None, None)
-            except Exception: pass
+    except KeyboardInterrupt:
+        clear_screen()
+        console.print("\n[bold yellow]Scan paused by user.[/bold yellow]\n")
+
 def show_banner():
     clear_screen()
-    try:
-        banner = Text()
-        banner.append("▀▄▀▄ KAVIN FAST SPEED ▄▀▄▀\n", style="bold bright_magenta")
-        banner.append("PREMIUM VOUCHER SCANNER SYSTEM", style="bold bright_cyan")
-        console.print(Panel(Align.center(banner), border_style="bright_magenta", box=DOUBLE))
-        console.print()
-    except Exception: pass
+    console.print()
+    console.print(Text("⚡ KAVIN FAST SPEED ⚡", style="bold bright_magenta"), justify="center")
+    console.print(Text("D A R K   M A T R I X", style="bold bright_green"), justify="center")
+    console.print(Text("────────────────────────", style="dim"), justify="center")
+    console.print()
 
 def ask_mode():
     while True:
         show_banner()
-        try:
-            menu = Text()
-            menu.append("  [1] 🔢  NUMERIC MODE\n", style="bold bright_white")
-            menu.append("  [2] 🔤  ALPHABET MODE\n", style="bold bright_white")
-            menu.append("  [3] 🔀  HYBRID MIX MODE\n", style="bold bright_white")
-            menu.append("  [0] ❌  EXIT SYSTEM\n", style="bold bright_red")
-            console.print(Panel(menu, title="[bold bright_yellow] SELECT SCAN MODE [/bold bright_yellow]", border_style="bright_yellow", box=HEAVY))
-            choice = input("➜ Select: ").strip()
-        except KeyboardInterrupt: raise
-        except Exception: return None
-
+        console.print("[bold bright_red]»[/bold bright_red] [white]Select Mode:[/white]")
+        console.print("  [1] 🔢 NUMERIC")
+        console.print("  [2] 🔤 ALPHABET")
+        console.print("  [3] 🔀 MIXED")
+        console.print("  [0] ❌ EXIT")
+        
+        choice = Prompt.ask("  [bright_cyan]│[/bright_cyan]").strip()
         if choice == "0": return None
         if choice not in ("1", "2", "3"):
-            try:
-                console.print("[bold bright_red]❌ Invalid![/bold bright_red]")
-                time.sleep(1)
-            except Exception: pass
+            console.print("[bold red]✖ Invalid![/bold red]")
+            time.sleep(1)
             continue
         return {"1": "num", "2": "eng", "3": "mix"}[choice]
 
 def ask_length(mode):
     while True:
-        clear_screen()
-        try:
-            console.print(Panel(Align.center(Text(f"🎯 MODE: {mode.upper()}", style="bold bright_magenta")), border_style="magenta", box=HEAVY))
-            console.print()
-            menu = Text()
-            for i in range(6, 10):
-                menu.append(f"  [{i}] ⚡  {i} CHARACTERS\n", style="bold bright_white")
-            menu.append("  [0] ⬅  BACK\n", style="bold bright_red")
-            console.print(Panel(menu, title="[bold bright_yellow] SELECT LENGTH [/bold bright_yellow]", border_style="bright_yellow", box=HEAVY))
-            length = input("➜ Select: ").strip()
-        except KeyboardInterrupt: raise
-        except Exception: return None
-
+        show_banner()
+        console.print(f"[bold bright_red]»[/bold bright_red] [white]Select Length for {mode.upper()}:[/white]")
+        for i in range(6, 10):
+            console.print(f"  [{i}] ⚡ {i} Characters")
+        console.print("  [0] ⬅ BACK")
+        
+        length = Prompt.ask("  [bright_cyan]│[/bright_cyan]").strip()
         if length == "0": return None
         if length not in ("6", "7", "8", "9"):
-            try:
-                console.print("[bold bright_red]❌ Invalid![/bold bright_red]")
-                time.sleep(1)
-            except Exception: pass
+            console.print("[bold red]✖ Invalid![/bold red]")
+            time.sleep(1)
             continue
         return int(length)
 
 def ask_scan_method():
     while True:
-        clear_screen()
-        try:
-            console.print(Panel(Align.center(Text("🎯 SCAN METHOD", style="bold bright_magenta")), border_style="magenta", box=HEAVY))
-            console.print()
-            menu = Text()
-            menu.append("  [1] 🎲  RANDOM (ကျပန်း)\n", style="bold bright_white")
-            menu.append("  [2] 📈  SEQUENTIAL (အစဉ်လိုက်)\n", style="bold bright_white")
-            menu.append("  [0] ⬅  BACK\n", style="bold bright_red")
-            console.print(Panel(menu, title="[bold bright_yellow] SELECT METHOD [/bold bright_yellow]", border_style="bright_yellow", box=HEAVY))
-            choice = input("➜ Select: ").strip()
-        except KeyboardInterrupt: raise
-        except Exception: return "random"
-
+        show_banner()
+        console.print("[bold bright_red]»[/bold bright_red] [white]Select Scan Method:[/white]")
+        console.print("  [1] 🎲 RANDOM (ကျပန်း)")
+        console.print("  [2] 📈 SEQUENTIAL (အစဉ်လိုက်)")
+        console.print("  [0] ⬅ BACK")
+        
+        choice = Prompt.ask("  [bright_cyan]│[/bright_cyan]").strip()
         if choice == "0": return None
         if choice not in ("1", "2"):
-            try:
-                console.print("[bold bright_red]❌ Invalid![/bold bright_red]")
-                time.sleep(1)
-            except Exception: pass
+            console.print("[bold red]✖ Invalid![/bold red]")
+            time.sleep(1)
             continue
         return {"1": "random", "2": "sequential"}[choice]
 
 def ask_url_method():
     while True:
-        clear_screen()
-        try:
-            console.print(Panel(Align.center(Text("🌐 URL METHOD", style="bold bright_magenta")), border_style="magenta", box=HEAVY))
-            console.print()
-            menu = Text()
-            menu.append("  [1] 📝  MANUAL (IP ကိုယ်တိုင်ထည့်)\n", style="bold bright_white")
-            menu.append("  [2] 🔄  AUTO (အလိုအလျောက်ရှာ)\n", style="bold bright_white")
-            menu.append("  [0] ⬅  BACK\n", style="bold bright_red")
-            console.print(Panel(menu, title="[bold bright_yellow] SELECT URL METHOD [/bold bright_yellow]", border_style="bright_yellow", box=HEAVY))
-            choice = input("➜ Select: ").strip()
-        except KeyboardInterrupt: raise
-        except Exception: return ("", "")
-
+        show_banner()
+        console.print("[bold bright_red]»[/bold bright_red] [white]Select URL Method:[/white]")
+        console.print("  [1] 📝 MANUAL (IP ကိုယ်တိုင်ထည့်)")
+        console.print("  [2] 🔄 AUTO (အလိုအလျောက်ရှာ)")
+        console.print("  [0] ⬅ BACK")
+        
+        choice = Prompt.ask("  [bright_cyan]│[/bright_cyan]").strip()
         if choice == "0": return None
         if choice == "1":
-            custom_url = input("➜ IP / URL: ").strip()
-            return (custom_url, "manual")
+            url = Prompt.ask("  [bright_cyan]➜ IP[/bright_cyan]").strip()
+            return (url, "manual")
         if choice == "2":
             return ("", "auto")
-        
-        try:
-            console.print("[bold bright_red]❌ Invalid![/bold bright_red]")
-            time.sleep(1)
-        except Exception: pass
-        continue
+        console.print("[bold red]✖ Invalid![/bold red]")
+        time.sleep(1)
 
 def run():
     state = load_state()
@@ -458,26 +395,11 @@ def run():
             custom_url = state.get("custom_url", "")
             scan_method = state.get("scan_method", "random")
 
-            clear_screen()
-            console.print(Panel(Align.center(Text("💾 RESTORING SESSION", style="bold bright_white on dark_red")), border_style="red", box=DOUBLE))
-            console.print()
-
-            info = Text()
-            info.append("  🎯 Mode       : ", style="cyan")
-            info.append(f"{m.upper()} {l}\n", style="bold white")
-            info.append("  🧭 Method     : ", style="cyan")
-            info.append(f"{scan_method.upper()}\n", style="bold white")
-            info.append("  🌐 URL        : ", style="cyan")
-            info.append(f"{custom_url or 'Auto'}\n", style="bold white")
-            info.append("  📊 Tested     : ", style="cyan")
-            info.append(f"{tested:,}\n", style="bold white")
-            info.append("  🎁 Hits       : ", style="cyan")
-            info.append(f"{len(hits)}\n", style="bold green")
-            console.print(Panel(info, title="Bot Session State", border_style="green", box=ROUNDED))
-            console.print()
-
-            ans = input("➜ Resume? (y/n): ").strip().lower()
-
+            show_banner()
+            console.print("[bold bright_yellow]💾 Previous Session Found![/bold bright_yellow]")
+            console.print(f"  Mode: {m.upper()} {l} | Tested: {tested:,} | Hits: {len(hits)}")
+            
+            ans = Prompt.ask("  [bright_cyan]➜ Resume? (y/n)[/bright_cyan]").strip().lower()
             if ans in ("", "y", "yes"):
                 scan_loop(m, int(l), custom_url, scan_method, start_tested=tested, start_hits=hits)
                 return
@@ -497,7 +419,7 @@ def run():
 
         url_choice = ask_url_method()
         if url_choice is None: continue
-        custom_url, url_mode = url_choice
+        custom_url, _ = url_choice
 
         scan_loop(mode, length, custom_url, method)
         return
@@ -511,16 +433,12 @@ def main():
         try: clear_screen()
         except BaseException: pass
         try:
-            bye = Text()
-            bye.append("\n\n")
-            bye.append("🔥 KAVIN FAST SPEED 🔥\n", style="bold bright_magenta")
-            bye.append("🙏 ကျေးဇူးတင်ပါတယ်ဗျ။ System Halted. ✨", style="bold bright_cyan")
-            bye.append("\n\n")
-            console.print(Align.center(bye))
+            console.print("\n\n")
+            console.print(Text("⚡ KAVIN FAST SPEED ⚡", style="bold bright_magenta"), justify="center")
+            console.print(Text("🙏 ကျေးဇူးတင်ပါတယ်ဗျ။ System Halted. ✨", style="bold bright_cyan"), justify="center")
+            console.print("\n\n")
             time.sleep(2)
-        except BaseException:
-            try: print("\n\n🔥 KAVIN FAST SPEED 🔥\n🙏 ကျေးဇူးတင်ပါတယ်ဗျ။")
-            except BaseException: pass
+        except BaseException: pass
 
 if __name__ == "__main__":
     main()
