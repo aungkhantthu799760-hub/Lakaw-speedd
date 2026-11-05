@@ -1,6 +1,6 @@
 # =====================================================================
-# lakaw.py (KAVIN FAST SPEED - Final Version with Emojis)
-# အပိုင်း (၁) - Core Engine & Dashboard
+# lakaw.py (KAVIN FAST SPEED - Combined Edition)
+# အပိုင်း (၁) - Core Engine & Scanner Logic
 # =====================================================================
 
 import os
@@ -47,6 +47,7 @@ session.mount('http://', adapter)
 session.mount('https://', adapter)
 
 db_lock = threading.Lock()
+LICENSE_INFO = {"status": ""}
 
 def generate_random_mac():
     first_octet = random.choice([0x00, 0x02, 0x04, 0x06, 0x0A, 0x0E])
@@ -149,8 +150,8 @@ def fetch_session(custom_url=""):
         try:
             fake_mac = generate_random_mac()
             headers = {
-                "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Client-Mac": fake_mac,
                 "X-Forwarded-For": f"192.168.110.{random.randint(2, 254)}"
             }
@@ -181,9 +182,7 @@ def fetch_session(custom_url=""):
                     if sid: return portal_base, sid
             except Exception: pass
             
-            if portal_base:
-                return portal_base, "dummy_session"
-                
+            if portal_base: return portal_base, "dummy_session"
         except Exception: continue
     return None, None
 
@@ -223,12 +222,12 @@ def gen_code(mode, length, scan_method="random"):
     except Exception: pass
     return ""
 
-# ★ Emoji များ အပြည့်ထည့်ထားသော Dashboard
 def get_dashboard_renderable(mode, current_code, tested, elapsed, status, hits, logs, speed, is_manual):
     status_color = "bright_green" if status == "Active" else ("bright_red" if status == "Limit" else "bright_yellow")
     mode_display = "MANUAL" if is_manual else "AUTO"
 
     dash = Text()
+    dash.append(f"  📅 Expiry  ➜ {LICENSE_INFO['status']}\n", style="bold bright_cyan")
     dash.append(f"  🎯 Code    ➜ {current_code}\n", style="bold bright_green")
     dash.append(f"  📊 Tested  ➜ {tested:,}\n", style="bold bright_yellow")
     dash.append(f"  ⚡ Speed   ➜ {speed:.1f} c/m\n", style="bold bright_cyan")
@@ -240,16 +239,12 @@ def get_dashboard_renderable(mode, current_code, tested, elapsed, status, hits, 
     dash.append("  ─── 📜 RECENT LOGS ───\n", style="bold bright_blue")
     unique_logs = []
     for lg in logs:
-        if lg not in unique_logs:
-            unique_logs.append(lg)
+        if lg not in unique_logs: unique_logs.append(lg)
             
-    for lg in unique_logs[-3:]: 
-        dash.append(f"  ⚡ {lg}\n", style="white")
-    if not unique_logs: 
-        dash.append("  ⚡ Waiting...\n", style="dim")
+    for lg in unique_logs[-3:]: dash.append(f"  ⚡ {lg}\n", style="white")
+    if not unique_logs: dash.append("  ⚡ Waiting...\n", style="dim")
         
     dash.append("\n")
-    
     dash.append("  ─── 💎 VALID CODE ───\n", style="bold bright_yellow")
     last_hits = hits[-3:]
     if last_hits:
@@ -257,20 +252,11 @@ def get_dashboard_renderable(mode, current_code, tested, elapsed, status, hits, 
             c = h.get("code", "") if isinstance(h, dict) else h
             t = h.get("time", "--:--:--") if isinstance(h, dict) else "--:--:--"
             dash.append(f"  🔑 [{i}] {c}  @{t}\n", style="bold bright_green")
-    else: 
-        dash.append("  🔍 Searching...\n", style="dim")
+    else: dash.append("  🔍 Searching...\n", style="dim")
         
-    panel = Panel(
-        dash,
-        title="[bold bright_cyan] ⚡ KAVIN FAST SPEED ⚡ [/bold bright_cyan]",
-        border_style="bright_cyan",
-        box=DOUBLE,
-        expand=False, 
-        padding=(1, 2)
-    )
-    
-    return panel
-def scan_loop(mode, length, portal_base=None, session_id=None, is_manual=False, scan_method="random", start_tested=0, start_hits=None):
+    return Panel(dash, title="[bold bright_cyan] ⚡ KAVIN FAST SPEED ⚡ [/bold bright_cyan]", border_style="bright_cyan", box=DOUBLE, expand=False, padding=(1, 2))
+
+def run_scanner(mode, length, portal_base=None, session_id=None, is_manual=False, scan_method="random", start_tested=0, start_hits=None):
     global seq_counter
     if scan_method == "sequential" and start_tested > 0: seq_counter = start_tested
 
@@ -389,6 +375,10 @@ def scan_loop(mode, length, portal_base=None, session_id=None, is_manual=False, 
                     time.sleep(NETWORK_RETRY_SLEEP)
                     continue
         except KeyboardInterrupt: pass
+# =====================================================================
+# lakaw.py (KAVIN FAST SPEED - Combined Edition)
+# အပိုင်း (၂) - Main Menu & Controller
+# =====================================================================
 
 def show_banner():
     clear_screen()
@@ -450,8 +440,6 @@ def ask_session_method():
         if choice == "2":
             clear_screen()
             console.print("  [bold yellow]🔗 Portal URL / Session ID ထည့်ပါ[/bold yellow]\n")
-            console.print("  [dim]ဥပမာ - http://192.168.1.1:2060/login?sessionId=abc12345...[/dim]")
-            console.print("  [dim]သို့မဟုတ် Session ID ကိုပဲ ရိုက်ထည့်ပါ (ဥပမာ - abc12345...)[/dim]\n")
             
             user_input = Prompt.ask("  [bright_cyan]➜ Paste Here[/bright_cyan]").strip()
             if not user_input: continue
@@ -465,7 +453,7 @@ def ask_session_method():
 
             if not sid and not base:
                 sid = user_input
-                base = Prompt.ask("  [bright_cyan]➜ Portal Base URL ထည့်ပါ (ဥပမာ - http://192.168.1.1:2060)[/bright_cyan]").strip()
+                base = Prompt.ask("  [bright_cyan]➜ Portal Base URL ထည့်ပါ[/bright_cyan]").strip()
 
             if sid and base: return ("manual", base, sid)
             else:
@@ -474,7 +462,13 @@ def ask_session_method():
                 continue
         console.print("  [bold red]Invalid![/bold red]"); time.sleep(1)
 
-def run():
+def main():
+    global LICENSE_INFO
+    is_valid, expiry_msg = _license.check_approval()
+    if not is_valid: return
+    
+    LICENSE_INFO["status"] = expiry_msg
+    
     state = load_state()
     if state:
         try:
@@ -489,19 +483,17 @@ def run():
             show_banner()
             console.print("  [bold yellow]💾 Previous Session Found[/bold yellow]\n")
             console.print(f"  Mode   : [bold white]{m.upper()} {l}[/bold white]")
-            console.print(f"  Method : [bold white]{scan_method.upper()}[/bold white]")
             console.print(f"  Tested : [bold white]{tested:,}[/bold white]")
             console.print(f"  Hits   : [bold green]{len(hits)}[/bold green]\n")
             
             ans = Prompt.ask("  [bright_cyan]➜ Resume? (y/n)[/bright_cyan]").strip().lower()
             if ans in ("", "y", "yes"):
                 if is_manual and custom_url and session_id:
-                    scan_loop(m, int(l), custom_url, session_id, is_manual=True, scan_method=scan_method, start_tested=tested, start_hits=hits)
+                    run_scanner(m, int(l), custom_url, session_id, is_manual=True, scan_method=scan_method, start_tested=tested, start_hits=hits)
                 else:
-                    scan_loop(m, int(l), is_manual=False, scan_method=scan_method, start_tested=tested, start_hits=hits)
+                    run_scanner(m, int(l), is_manual=False, scan_method=scan_method, start_tested=tested, start_hits=hits)
                 return
             else: clear_state()
-        except KeyboardInterrupt: raise
         except Exception: clear_state()
 
     while True:
@@ -521,28 +513,19 @@ def run():
 
         if method_type == "manual":
             save_state(f"{mode}_{length}", 0, [], p_base, method, s_id, True)
-            scan_loop(mode, length, p_base, s_id, is_manual=True, scan_method=method)
+            run_scanner(mode, length, p_base, s_id, is_manual=True, scan_method=method)
         else:
             save_state(f"{mode}_{length}", 0, [], "", method, "", False)
-            scan_loop(mode, length, is_manual=False, scan_method=method)
+            run_scanner(mode, length, is_manual=False, scan_method=method)
         return
 
-def main():
-    if not _license.check_approval(): 
-        return
-        
-    try: run()
+if __name__ == "__main__":
+    try: main()
     except KeyboardInterrupt: pass
-    except BaseException: pass
     finally:
-        try: clear_screen()
-        except BaseException: pass
         try:
             console.print("\n\n")
             console.print(Text("🙏 ကျေးဇူးတင်ပါတယ်ဗျ။ ✨", style="bold bright_green"), justify="center")
             console.print("\n\n")
             time.sleep(2)
-        except BaseException: pass
-
-if __name__ == "__main__":
-    main()
+        except Exception: pass
